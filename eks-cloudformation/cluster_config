@@ -17,7 +17,7 @@ Subnet03Block = 10.20.192.0/18
 # Availability zones
 Subnet01Az = 0
 Subnet02Az = 1
-Subnet03Az = 3
+Subnet03Az = 2
 
 # Instances
 instanceType = t3.medium
