@@ -42,10 +42,10 @@ jobs:
       - name: Deploy ingress-nginx controller
         run: kubectl apply -f ingress-nginx/deploy.yaml
 
-      # Example for a tool like Cluster Autoscaler
-      - name: Deploy Cluster Autoscaler
+      # Example for a tool like Karpenter
+      - name: Deploy Karpenter
         run: |
-            echo "Deploy Cluster Autoscaler steps go here"
+            echo "Deploy Karpenter steps go here"
 
       # Example for a tool like EKS Logging
       - name: Deploy EKS Logging

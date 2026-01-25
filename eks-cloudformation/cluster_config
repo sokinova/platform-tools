@@ -4,7 +4,7 @@
 instanceProfile = ondemand
 
 # EKS version
-version = 1.31
+version = 1.34
 
 
 # Network

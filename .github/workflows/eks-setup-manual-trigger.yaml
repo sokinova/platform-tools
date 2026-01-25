@@ -48,7 +48,7 @@ jobs:
       - name: Create EKS Cluster with CloudFormation
         run: |
           SSO_ADMIN_ROLE=$(aws iam list-roles --query "Roles[?starts_with(RoleName, 'AWSReservedSSO_Administrator')].RoleName" --output text)
-          make cluster name=temporary-eks-cluster-${{ github.event.inputs.environment_stage }} version=1.28 role=$SSO_ADMIN_ROLE
+          make cluster name=temporary-eks-cluster-${{ github.event.inputs.environment_stage }} version=1.34 role=$SSO_ADMIN_ROLE
         working-directory: ./eks-cloudformation
 
       # Login to EKS

@@ -8,7 +8,7 @@ include cluster_config
 SpotPrice = 0.0464
 NodeGroupName = $(name)-workers
 WorkersStackName = $(name)-workers
-ami = $(shell aws ssm get-parameter --name /aws/service/eks/optimized-ami/$(version)/amazon-linux-2/recommended/image_id --region $(region) --query "Parameter.Value" --output text)
+ami = $(shell aws ssm get-parameter --name /aws/service/eks/optimized-ami/$(version)/amazon-linux-2023/x86_64/standard/recommended/image_id --region $(region) --query "Parameter.Value" --output text)
 
 default: help
 
@@ -130,8 +130,3 @@ delete-workers:
 	@$(aws) cloudformation delete-stack --stack-name $(WorkersStackName)
 	$(aws) cloudformation wait stack-delete-complete --stack-name $(WorkersStackName)
 
-disable-autoscaler:
-	kubectl scale deployments/cluster-autoscaler --replicas=0 -n kube-system
-
-enable-autoscaler:
-	kubectl scale deployments/cluster-autoscaler --replicas=1 -n kube-system

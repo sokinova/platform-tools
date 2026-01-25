@@ -4,7 +4,7 @@
 This repository is structured to support the deployment and management of various DevOps and platform tools, primarily focused on Amazon EKS.
 
 ## Repository Structure
-- `cluster-autoscaler/`: Configurations for the Kubernetes Cluster Autoscaler.
+- `karpenter/`: Configurations for Karpenter node provisioning.
 - `eks-cloudformation/`: CloudFormation templates for EKS cluster creation.
 - `eks-logging/`: Logging tools for EKS.
 - `eks-monitoring/`: Monitoring tools for EKS.

@@ -26,6 +26,6 @@
       - `role`: to set iam role for eks access.
   2. Run:
       ~~~bash
-      make cluster version=1.31 role=EXAMPLE_IAM_ROLE
-      make cluster version=1.31 role="arn:aws:iam::036692858685:role/aws-reserved/sso.amazonaws.com/us-east-2/AWSReservedSSO_Administrator_0238c8388aaa3bbe"
+      make cluster version=1.34 role=EXAMPLE_IAM_ROLE
+      make cluster version=1.34 role="arn:aws:iam::036692858685:role/aws-reserved/sso.amazonaws.com/us-east-2/AWSReservedSSO_Administrator_0238c8388aaa3bbe"
       ~~~
