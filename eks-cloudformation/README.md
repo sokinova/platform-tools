@@ -27,5 +27,6 @@
   2. Run:
       ~~~bash
       make cluster version=1.34 role=EXAMPLE_IAM_ROLE
-      make cluster version=1.34 role="arn:aws:iam::036692858685:role/aws-reserved/sso.amazonaws.com/us-east-2/AWSReservedSSO_Administrator_0238c8388aaa3bbe"
+      make cluster version=1.34 role="arn:aws:iam::383585068161:role/aws-reserved/sso.amazonaws.com/us-east-2/AWSReservedSSO_AdministratorAccess_b18a1488d07743cc"
+      make cluster name=baha-eks-cluster-test2 version=1.34 role="arn:aws:iam::383585068161:role/aws-reserved/sso.amazonaws.com/us-east-2/AWSReservedSSO_AdministratorAccess_b18a1488d07743cc"
       ~~~

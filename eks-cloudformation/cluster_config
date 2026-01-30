@@ -24,4 +24,4 @@ instanceType = t3.medium
 asgMin = 1
 asgMax = 5
 asgDesired = 2
-volumeSize = 8
+volumeSize = 20

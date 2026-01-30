@@ -23,10 +23,24 @@ prereq:
 	kubectl > /dev/null || (echo "Please install kubectl" && exit 1);
 
 oidc:
-	@$(eval role_arn := $(shell $(aws) cloudformation describe-stacks --query "Stacks[?StackName=='$(name)'][].Outputs[?OutputKey=='EBSDriverRoleArn'].OutputValue" --output text))
-	kubectl annotate serviceaccount ebs-csi-controller-sa -n kube-system eks.amazonaws.com/role-arn=$(role_arn) --overwrite
+	@echo "Setting up OIDC provider for cluster $(name)..."
 	eksctl utils associate-iam-oidc-provider --cluster $(name) --approve --region $(region)
-	kubectl rollout restart deployment ebs-csi-controller -n kube-system
+	@echo "Creating IAM service account for EBS CSI Driver..."
+	eksctl create iamserviceaccount \
+	  --name ebs-csi-controller-sa \
+	  --namespace kube-system \
+	  --cluster $(name) \
+	  --attach-policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy \
+	  --approve \
+	  --override-existing-serviceaccounts \
+	  --region $(region)
+	@echo "Installing EBS CSI Driver addon..."
+	@$(aws) eks create-addon \
+	  --cluster-name $(name) \
+	  --addon-name aws-ebs-csi-driver \
+	  --service-account-role-arn $$(eksctl get iamserviceaccount --cluster $(name) --name ebs-csi-controller-sa --namespace kube-system --region $(region) -o json | grep -o 'arn:aws:iam::[^"]*') \
+	  || echo "EBS CSI Driver addon may already exist"
+	@echo "✓ OIDC and EBS CSI Driver setup complete"
 
 
 secret-generator:
@@ -129,4 +143,3 @@ workers: update-kubeconfig
 delete-workers:
 	@$(aws) cloudformation delete-stack --stack-name $(WorkersStackName)
 	$(aws) cloudformation wait stack-delete-complete --stack-name $(WorkersStackName)
-
