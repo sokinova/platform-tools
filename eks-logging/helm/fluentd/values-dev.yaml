@@ -1,0 +1,168 @@
+# FluentD Helm values for dev environment
+# Chart: fluent/fluentd v0.5.2
+# DaemonSet with dual output: Elasticsearch + S3
+
+kind: DaemonSet
+
+image:
+  repository: fluent/fluentd-kubernetes-daemonset
+  tag: v1.16-debian-elasticsearch8-1
+
+# ServiceAccount with IRSA for S3 access
+serviceAccount:
+  create: true
+  name: fluentd-dev
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/fluentd-s3-dev"
+
+# Resource configuration - minimal for dev
+resources:
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+# Environment variables
+env:
+  - name: FLUENT_ELASTICSEARCH_HOST
+    value: "elasticsearch-dev-master"
+  - name: FLUENT_ELASTICSEARCH_PORT
+    value: "9200"
+  - name: FLUENT_ELASTICSEARCH_SCHEME
+    value: "http"
+  - name: FLUENT_ELASTICSEARCH_SSL_VERIFY
+    value: "false"
+  - name: FLUENT_ELASTICSEARCH_SSL_VERSION
+    value: "TLSv1_2"
+  - name: FLUENT_ELASTICSEARCH_LOGSTASH_PREFIX
+    value: "kubernetes"
+  - name: FLUENT_S3_BUCKET
+    value: "eks-logs-312ubuntu-dev"
+  - name: FLUENT_S3_REGION
+    value: "us-east-1"
+  - name: K8S_NODE_NAME
+    valueFrom:
+      fieldRef:
+        fieldPath: spec.nodeName
+
+# Mount container logs
+volumes:
+  - name: varlog
+    hostPath:
+      path: /var/log
+  - name: containers
+    hostPath:
+      path: /var/lib/docker/containers
+  - name: fluentd-config
+    configMap:
+      name: fluentd-config
+
+volumeMounts:
+  - name: varlog
+    mountPath: /var/log
+    readOnly: true
+  - name: containers
+    mountPath: /var/lib/docker/containers
+    readOnly: true
+  - name: fluentd-config
+    mountPath: /fluentd/etc/fluent.conf
+    subPath: fluent.conf
+
+# FluentD configuration with dual output
+fileConfigs:
+  01_sources.conf: |-
+    <source>
+      @type tail
+      @id in_tail_container_logs
+      path /var/log/containers/*.log
+      pos_file /var/log/fluentd-containers.log.pos
+      tag kubernetes.*
+      read_from_head true
+      <parse>
+        @type json
+        time_format %Y-%m-%dT%H:%M:%S.%NZ
+      </parse>
+    </source>
+
+  02_filters.conf: |-
+    <filter kubernetes.**>
+      @type kubernetes_metadata
+      @id filter_kube_metadata
+    </filter>
+
+    <filter kubernetes.**>
+      @type record_transformer
+      <record>
+        cluster_name temp-eks-cluster-dev
+        environment dev
+      </record>
+    </filter>
+
+  03_outputs.conf: |-
+    <match kubernetes.**>
+      @type copy
+
+      # Output to Elasticsearch
+      <store>
+        @type elasticsearch
+        @id out_es
+        host "#{ENV['FLUENT_ELASTICSEARCH_HOST']}"
+        port "#{ENV['FLUENT_ELASTICSEARCH_PORT']}"
+        scheme "#{ENV['FLUENT_ELASTICSEARCH_SCHEME']}"
+        ssl_verify "#{ENV['FLUENT_ELASTICSEARCH_SSL_VERIFY']}"
+        logstash_format true
+        logstash_prefix "#{ENV['FLUENT_ELASTICSEARCH_LOGSTASH_PREFIX']}"
+        type_name _doc
+        include_tag_key true
+        <buffer>
+          @type file
+          path /var/log/fluentd-buffers/kubernetes.system.buffer
+          flush_mode interval
+          flush_interval 5s
+          retry_type exponential_backoff
+          retry_forever false
+          retry_max_interval 30
+          chunk_limit_size 2M
+          queue_limit_length 8
+          overflow_action block
+        </buffer>
+      </store>
+
+      # Output to S3 for backup/long-term storage
+      <store>
+        @type s3
+        @id out_s3
+        s3_bucket "#{ENV['FLUENT_S3_BUCKET']}"
+        s3_region "#{ENV['FLUENT_S3_REGION']}"
+        path logs/%Y/%m/%d/
+        <buffer time>
+          @type file
+          path /var/log/fluentd-buffers/s3.buffer
+          timekey 3600
+          timekey_wait 10m
+          timekey_use_utc true
+          chunk_limit_size 256m
+        </buffer>
+        <format>
+          @type json
+        </format>
+      </store>
+    </match>
+
+# Tolerations to run on all nodes
+tolerations:
+  - key: node-role.kubernetes.io/master
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/control-plane
+    effect: NoSchedule
+
+# Node selector
+nodeSelector: {}
+
+# Update strategy
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
