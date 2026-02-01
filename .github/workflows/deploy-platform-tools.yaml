@@ -38,6 +38,12 @@ jobs:
       - name: Login to EKS - update kubeconfig
         run: aws eks update-kubeconfig --name temporary-eks-cluster-${ENVIRONMENT_STAGE} --region $AWS_REGION
 
+      # Install Helm
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.13.0'
+
       # Add deployment steps for each tool below
       - name: Deploy ingress-nginx controller
         run: kubectl apply -f ingress-nginx/deploy.yaml
@@ -47,10 +53,74 @@ jobs:
         run: |
             echo "Deploy Karpenter steps go here"
 
-      # Example for a tool like EKS Logging
-      - name: Deploy EKS Logging
+      # EFK Logging Stack Deployment
+      - name: Create logging namespace
+        run: kubectl apply -f eks-logging/namespace.yaml
+
+      - name: Add Helm repositories
         run: |
-            echo "Deploy EKS Logging steps go here"
+          helm repo add elastic https://helm.elastic.co
+          helm repo add fluent https://fluent.github.io/helm-charts
+          helm repo update
+
+      - name: Setup IRSA for FluentD
+        run: |
+          chmod +x eks-logging/iam/irsa-setup.sh
+          ./eks-logging/iam/irsa-setup.sh ${ENVIRONMENT_STAGE}
+
+      - name: Deploy Elasticsearch
+        run: |
+          helm upgrade --install elasticsearch-${ENVIRONMENT_STAGE} elastic/elasticsearch \
+            --namespace logging \
+            --values eks-logging/helm/elasticsearch/values-${ENVIRONMENT_STAGE}.yaml \
+            --wait \
+            --timeout 10m
+
+      - name: Wait for Elasticsearch
+        run: |
+          kubectl wait --for=condition=ready pod \
+            -l app=elasticsearch-master \
+            -n logging \
+            --timeout=300s
+
+      - name: Deploy Kibana
+        run: |
+          helm upgrade --install kibana-${ENVIRONMENT_STAGE} elastic/kibana \
+            --namespace logging \
+            --values eks-logging/helm/kibana/values-${ENVIRONMENT_STAGE}.yaml \
+            --wait \
+            --timeout 5m
+
+      - name: Create Kibana auth secret
+        run: |
+          chmod +x eks-logging/scripts/create-kibana-secret.sh
+          ./eks-logging/scripts/create-kibana-secret.sh ${ENVIRONMENT_STAGE}
+
+      - name: Apply Kibana Ingress
+        run: kubectl apply -f eks-logging/manifests/kibana-ingress-${ENVIRONMENT_STAGE}.yaml
+
+      - name: Deploy FluentD
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          sed "s/\${AWS_ACCOUNT_ID}/${AWS_ACCOUNT_ID}/g" \
+            eks-logging/helm/fluentd/values-${ENVIRONMENT_STAGE}.yaml > /tmp/fluentd-values.yaml
+          helm upgrade --install fluentd-${ENVIRONMENT_STAGE} fluent/fluentd \
+            --namespace logging \
+            --values /tmp/fluentd-values.yaml \
+            --wait \
+            --timeout 5m
+
+      - name: Verify EFK deployment
+        run: |
+          echo "Checking EFK stack status..."
+          kubectl get pods -n logging
+          echo ""
+          echo "Checking Elasticsearch cluster health..."
+          ES_POD=$(kubectl get pods -n logging -l app=elasticsearch-master -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec -n logging ${ES_POD} -- curl -s http://localhost:9200/_cluster/health | jq
+          echo ""
+          echo "Checking Ingress status..."
+          kubectl get ingress -n logging
 
       # Repeat for each additional tool...
       # Example: Deploy External DNS
@@ -59,4 +129,3 @@ jobs:
       - name: Finalize Deployment
         run: |
             echo "Final deployment steps and cleanup"
-
