@@ -1,0 +1,78 @@
+# Kibana Helm values for prod environment
+# Chart: elastic/kibana v8.5.1
+
+replicas: 2
+
+# Elasticsearch connection
+elasticsearchHosts: "http://elasticsearch-prod-master:9200"
+
+# Resource configuration - production grade
+resources:
+  requests:
+    cpu: "1000m"
+    memory: "2Gi"
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+
+# Kibana configuration
+kibanaConfig:
+  kibana.yml: |
+    server.name: kibana-prod
+    server.host: "0.0.0.0"
+    elasticsearch.hosts: ["http://elasticsearch-prod-master:9200"]
+    monitoring.ui.container.elasticsearch.enabled: true
+    xpack.security.enabled: true
+    xpack.encryptedSavedObjects.encryptionKey: "${KIBANA_ENCRYPTION_KEY}"
+
+# Health check
+healthCheckPath: "/app/kibana"
+
+# Service - ClusterIP, exposed via Ingress
+service:
+  type: ClusterIP
+  port: 5601
+
+# Ingress - disabled here, managed separately
+ingress:
+  enabled: false
+
+# Security context
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+
+# Readiness probe
+readinessProbe:
+  failureThreshold: 3
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  successThreshold: 3
+  timeoutSeconds: 5
+
+# Pod disruption budget
+podDisruptionBudget:
+  maxUnavailable: 1
+
+# Node selector
+nodeSelector: {}
+
+tolerations: []
+
+# Prefer spreading across nodes
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app: kibana
+          topologyKey: kubernetes.io/hostname

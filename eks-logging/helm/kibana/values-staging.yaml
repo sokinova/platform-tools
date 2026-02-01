@@ -1,0 +1,64 @@
+# Kibana Helm values for staging environment
+# Chart: elastic/kibana v8.5.1
+
+replicas: 1
+
+# Elasticsearch connection
+elasticsearchHosts: "http://elasticsearch-staging-master:9200"
+
+# Resource configuration - moderate for staging
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "1000m"
+    memory: "2Gi"
+
+# Kibana configuration
+kibanaConfig:
+  kibana.yml: |
+    server.name: kibana-staging
+    server.host: "0.0.0.0"
+    elasticsearch.hosts: ["http://elasticsearch-staging-master:9200"]
+    monitoring.ui.container.elasticsearch.enabled: true
+    xpack.security.enabled: true
+
+# Health check
+healthCheckPath: "/app/kibana"
+
+# Service - ClusterIP, exposed via Ingress
+service:
+  type: ClusterIP
+  port: 5601
+
+# Ingress - disabled here, managed separately
+ingress:
+  enabled: false
+
+# Security context
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+
+# Readiness probe
+readinessProbe:
+  failureThreshold: 3
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  successThreshold: 3
+  timeoutSeconds: 5
+
+# Node selector
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
