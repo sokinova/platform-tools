@@ -81,9 +81,6 @@ eks-logging/
 │   ├── kibana-ingress-staging.yaml
 │   ├── kibana-ingress-prod.yaml
 │   └── kibana-auth-secret.yaml       # Basic auth template
-├── iam/
-│   ├── fluentd-s3-policy.json        # S3 write policy
-│   └── irsa-setup.sh                 # IRSA creation script
 └── scripts/
     ├── deploy.sh                      # Full deployment script
     ├── create-kibana-secret.sh       # Auth secret setup
@@ -124,11 +121,10 @@ kubectl get pods -A
 This will:
 1. Create the `logging` namespace
 2. Add Helm repositories
-3. Setup IRSA for FluentD S3 access
-4. Deploy Elasticsearch
-5. Deploy Kibana
-6. Create auth secret and Ingress
-7. Deploy FluentD
+3. Deploy Elasticsearch
+4. Deploy Kibana
+5. Create auth secret and Ingress
+6. Deploy FluentD
 
 ### Verify Deployment
 
@@ -152,13 +148,7 @@ helm repo add fluent https://fluent.github.io/helm-charts
 helm repo update
 ```
 
-### Step 3: Setup IRSA
-
-```bash
-./eks-logging/iam/irsa-setup.sh dev
-```
-
-### Step 4: Deploy Elasticsearch
+### Step 3: Deploy Elasticsearch
 
 ```bash
 helm upgrade --install elasticsearch-dev elastic/elasticsearch \
@@ -167,7 +157,7 @@ helm upgrade --install elasticsearch-dev elastic/elasticsearch \
   --wait --timeout 10m
 ```
 
-### Step 5: Deploy Kibana
+### Step 4: Deploy Kibana
 
 ```bash
 helm upgrade --install kibana-dev elastic/kibana \
@@ -176,7 +166,7 @@ helm upgrade --install kibana-dev elastic/kibana \
   --wait --timeout 5m
 ```
 
-### Step 6: Setup Kibana Access
+### Step 5: Setup Kibana Access
 
 ```bash
 # Create auth secret
@@ -186,7 +176,7 @@ helm upgrade --install kibana-dev elastic/kibana \
 kubectl apply -f eks-logging/manifests/kibana-ingress-dev.yaml
 ```
 
-### Step 7: Deploy FluentD
+### Step 6: Deploy FluentD
 
 ```bash
 # Replace AWS_ACCOUNT_ID in values file
@@ -205,6 +195,33 @@ helm upgrade --install fluentd-dev fluent/fluentd \
 FluentD is configured for dual output:
 1. **Elasticsearch** - Real-time search and visualization
 2. **S3** - Long-term backup and compliance
+
+### IAM Dependency
+
+**Note:** For FluentD to write logs to S3, an IAM role with IRSA (IAM Roles for Service Accounts) must be provisioned. This is handled separately by the IAM automation team (see MRP25BUBUN-6).
+
+The FluentD ServiceAccount requires an IAM role with the following permissions:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": "arn:aws:s3:::eks-logs-312ubuntu-*/logs/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::eks-logs-312ubuntu-*"
+    }
+  ]
+}
+```
+
+Until the IAM role is provisioned:
+- **Elasticsearch output works** - Logs flow to Elasticsearch normally
+- **S3 output fails silently** - FluentD buffers logs and retries
 
 ### S3 Bucket
 
@@ -324,4 +341,3 @@ kubectl delete namespace logging
 - [Kibana Helm Chart](https://github.com/elastic/helm-charts/tree/main/kibana)
 - [FluentD Helm Chart](https://github.com/fluent/helm-charts/tree/main/charts/fluentd)
 - [FluentD S3 Plugin](https://docs.fluentd.org/output/s3)
-- [IRSA Documentation](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html)

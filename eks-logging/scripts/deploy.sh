@@ -43,19 +43,17 @@ kubectl apply -f ${ROOT_DIR}/namespace.yaml
 echo ""
 
 # Step 2: Add Helm repositories
-echo "[2/7] Adding Helm repositories..."
+echo "[2/6] Adding Helm repositories..."
 helm repo add elastic https://helm.elastic.co 2>/dev/null || true
 helm repo add fluent https://fluent.github.io/helm-charts 2>/dev/null || true
 helm repo update
 echo ""
 
-# Step 3: Setup IRSA for FluentD
-echo "[3/7] Setting up IRSA for FluentD..."
-${ROOT_DIR}/iam/irsa-setup.sh ${ENVIRONMENT}
-echo ""
+# Note: IRSA for FluentD S3 access should be created by IAM automation (MRP25BUBUN-6)
+# FluentD will work for Elasticsearch output; S3 output requires IAM role to be provisioned
 
-# Step 4: Deploy Elasticsearch
-echo "[4/7] Deploying Elasticsearch..."
+# Step 3: Deploy Elasticsearch
+echo "[3/6] Deploying Elasticsearch..."
 helm upgrade --install elasticsearch-${ENVIRONMENT} elastic/elasticsearch \
   --namespace ${NAMESPACE} \
   --values ${ROOT_DIR}/helm/elasticsearch/values-${ENVIRONMENT}.yaml \
@@ -71,8 +69,8 @@ kubectl wait --for=condition=ready pod \
   --timeout=300s
 echo ""
 
-# Step 5: Deploy Kibana
-echo "[5/7] Deploying Kibana..."
+# Step 4: Deploy Kibana
+echo "[4/6] Deploying Kibana..."
 helm upgrade --install kibana-${ENVIRONMENT} elastic/kibana \
   --namespace ${NAMESPACE} \
   --values ${ROOT_DIR}/helm/kibana/values-${ENVIRONMENT}.yaml \
@@ -80,14 +78,14 @@ helm upgrade --install kibana-${ENVIRONMENT} elastic/kibana \
   --timeout 5m
 echo ""
 
-# Step 6: Create Kibana auth secret and apply ingress
-echo "[6/7] Setting up Kibana authentication and ingress..."
+# Step 5: Create Kibana auth secret and apply ingress
+echo "[5/6] Setting up Kibana authentication and ingress..."
 ${SCRIPT_DIR}/create-kibana-secret.sh ${ENVIRONMENT}
 kubectl apply -f ${ROOT_DIR}/manifests/kibana-ingress-${ENVIRONMENT}.yaml
 echo ""
 
-# Step 7: Deploy FluentD
-echo "[7/7] Deploying FluentD..."
+# Step 6: Deploy FluentD
+echo "[6/6] Deploying FluentD..."
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 # Create values file with substituted account ID
