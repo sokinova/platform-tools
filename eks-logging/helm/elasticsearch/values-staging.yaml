@@ -1,0 +1,73 @@
+# Elasticsearch Helm values for staging environment
+# Chart: elastic/elasticsearch v8.5.1
+# 2-node cluster for staging
+
+replicas: 2
+minimumMasterNodes: 2
+
+# Resource configuration - moderate for staging
+resources:
+  requests:
+    cpu: "1000m"
+    memory: "2Gi"
+  limits:
+    cpu: "2000m"
+    memory: "4Gi"
+
+# JVM heap - should be ~50% of memory limit
+esJavaOpts: "-Xmx1g -Xms1g"
+
+# Persistence
+volumeClaimTemplate:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: gp2
+
+# Cluster health check
+clusterHealthCheckParams: "wait_for_status=yellow&timeout=1s"
+
+# Security - enabled for staging
+esConfig:
+  elasticsearch.yml: |
+    xpack.security.enabled: true
+    xpack.security.enrollment.enabled: false
+    xpack.security.transport.ssl.enabled: true
+    xpack.security.transport.ssl.verification_mode: certificate
+    xpack.security.transport.ssl.keystore.path: /usr/share/elasticsearch/config/certs/elastic-certificates.p12
+    xpack.security.transport.ssl.truststore.path: /usr/share/elasticsearch/config/certs/elastic-certificates.p12
+    cluster.name: "elasticsearch-staging"
+    network.host: 0.0.0.0
+
+# Pod antiaffinity - prefer different nodes
+antiAffinity: "soft"
+
+# Node selector - target larger nodes if available
+nodeSelector: {}
+
+tolerations: []
+
+# Service configuration
+service:
+  type: ClusterIP
+  httpPortName: http
+  transportPortName: transport
+
+# Ingress - disabled
+ingress:
+  enabled: false
+
+# Readiness probe
+readinessProbe:
+  failureThreshold: 3
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  successThreshold: 3
+  timeoutSeconds: 5
+
+# Lifecycle hooks for graceful shutdown
+lifecycle:
+  preStop:
+    exec:
+      command: ["/bin/sh", "-c", "sleep 20"]

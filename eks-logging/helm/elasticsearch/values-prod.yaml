@@ -1,0 +1,81 @@
+# Elasticsearch Helm values for prod environment
+# Chart: elastic/elasticsearch v8.5.1
+# 3-node cluster for production with high availability
+
+replicas: 3
+minimumMasterNodes: 2
+
+# Resource configuration - production grade
+resources:
+  requests:
+    cpu: "2000m"
+    memory: "4Gi"
+  limits:
+    cpu: "4000m"
+    memory: "8Gi"
+
+# JVM heap - should be ~50% of memory limit
+esJavaOpts: "-Xmx2g -Xms2g"
+
+# Persistence - larger storage for production
+volumeClaimTemplate:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: gp2
+
+# Cluster health check - stricter for prod
+clusterHealthCheckParams: "wait_for_status=green&timeout=5s"
+
+# Security - fully enabled for production
+esConfig:
+  elasticsearch.yml: |
+    xpack.security.enabled: true
+    xpack.security.enrollment.enabled: false
+    xpack.security.transport.ssl.enabled: true
+    xpack.security.transport.ssl.verification_mode: certificate
+    xpack.security.transport.ssl.keystore.path: /usr/share/elasticsearch/config/certs/elastic-certificates.p12
+    xpack.security.transport.ssl.truststore.path: /usr/share/elasticsearch/config/certs/elastic-certificates.p12
+    xpack.security.http.ssl.enabled: false
+    cluster.name: "elasticsearch-prod"
+    network.host: 0.0.0.0
+
+# Pod antiaffinity - require different nodes in production
+antiAffinity: "hard"
+
+# Node selector - target dedicated logging nodes if available
+nodeSelector: {}
+
+tolerations: []
+
+# Pod disruption budget
+podDisruptionBudget:
+  maxUnavailable: 1
+
+# Service configuration
+service:
+  type: ClusterIP
+  httpPortName: http
+  transportPortName: transport
+
+# Ingress - disabled
+ingress:
+  enabled: false
+
+# Readiness probe
+readinessProbe:
+  failureThreshold: 3
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  successThreshold: 3
+  timeoutSeconds: 5
+
+# Lifecycle hooks for graceful shutdown
+lifecycle:
+  preStop:
+    exec:
+      command: ["/bin/sh", "-c", "sleep 20"]
+
+# Update strategy
+updateStrategy: RollingUpdate
