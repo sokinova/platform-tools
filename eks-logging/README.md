@@ -81,6 +81,9 @@ eks-logging/
 │   ├── kibana-ingress-staging.yaml
 │   ├── kibana-ingress-prod.yaml
 │   └── kibana-auth-secret.yaml       # Basic auth template
+├── iam/
+│   ├── fluentd-s3-policy.json        # S3 write policy (dev only)
+│   └── irsa-setup.sh                 # IRSA setup script (dev only)
 └── scripts/
     ├── deploy.sh                      # Full deployment script
     ├── create-kibana-secret.sh       # Auth secret setup
@@ -196,9 +199,11 @@ FluentD is configured for dual output:
 1. **Elasticsearch** - Real-time search and visualization
 2. **S3** - Long-term backup and compliance
 
-### IAM Dependency
+### IAM for S3 Access
 
-**Note:** For FluentD to write logs to S3, an IAM role with IRSA (IAM Roles for Service Accounts) must be provisioned. This is handled separately by the IAM automation team (see MRP25BUBUN-6).
+**Dev environment:** IRSA is set up automatically by the deploy script (`iam/irsa-setup.sh`). This is a temporary setup for testing.
+
+**Staging/Prod:** IAM should be managed by the IAM automation team (MRP25BUBUN-6).
 
 The FluentD ServiceAccount requires an IAM role with the following permissions:
 ```json

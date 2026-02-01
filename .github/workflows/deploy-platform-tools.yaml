@@ -63,8 +63,12 @@ jobs:
           helm repo add fluent https://fluent.github.io/helm-charts
           helm repo update
 
-      # Note: IRSA for FluentD S3 access should be created by IAM automation (MRP25BUBUN-6)
-      # FluentD will work for Elasticsearch output; S3 output requires IAM role to be provisioned
+      # Temporary IRSA setup for dev testing - staging/prod should use IAM automation (MRP25BUBUN-6)
+      - name: Setup IRSA for FluentD (dev only)
+        if: env.ENVIRONMENT_STAGE == 'dev'
+        run: |
+          chmod +x eks-logging/iam/irsa-setup.sh
+          ./eks-logging/iam/irsa-setup.sh ${ENVIRONMENT_STAGE}
 
       - name: Deploy Elasticsearch
         run: |
