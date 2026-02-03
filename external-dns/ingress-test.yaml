@@ -1,0 +1,22 @@
+#FOR TEST PURPUSES ONLY
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: external-dns-test
+  namespace: external-dns
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: external-dns-test.312ubuntu.com
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: external-dns-test.312ubuntu.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: kubernetes
+            port:
+              number: 443
