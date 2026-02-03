@@ -26,3 +26,10 @@ nodeExporter:
   enabled: true
   image: prom/node-exporter:v1.8.1
 
+grafana:
+  enabled: true
+  
+  ingress:
+    enabled: true
+    className: nginx
+    host: grafana-ubuntu-dev.312ubuntu.com
