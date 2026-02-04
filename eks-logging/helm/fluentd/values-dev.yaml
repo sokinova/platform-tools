@@ -1,68 +1,71 @@
 # FluentD Helm values for dev environment
 # Chart: fluent/fluentd v0.5.2
-# DaemonSet with dual output: Elasticsearch + S3
+# Log collector that runs on every node and sends logs to ES + S3
 
+# DaemonSet means one pod runs on every node automatically
 kind: DaemonSet
 
+# Container image - pre-built with Elasticsearch and S3 plugins
 image:
   repository: fluent/fluentd-kubernetes-daemonset
-  tag: v1.16-debian-elasticsearch8-1
+  tag: v1.16-debian-elasticsearch8-1         # Compatible with ES 8.x
 
-# ServiceAccount with IRSA for S3 access
+# ServiceAccount with IRSA - allows FluentD to write to S3 without hardcoded credentials
+# The ${AWS_ACCOUNT_ID} placeholder is replaced at deploy time by the script
 serviceAccount:
-  create: true
-  name: fluentd-dev
+  create: true                               # Helm creates the ServiceAccount
+  name: fluentd-dev                          # ServiceAccount name
   annotations:
-    eks.amazonaws.com/role-arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/fluentd-s3-dev"
+    eks.amazonaws.com/role-arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/fluentd-s3-dev"  # IAM role for S3 access
 
-# Resource configuration - minimal for dev
+# Resource limits - lightweight since FluentD just forwards logs
 resources:
   requests:
-    cpu: "100m"
-    memory: "256Mi"
+    cpu: "100m"                              # 0.1 CPU cores
+    memory: "256Mi"                          # 256MB RAM
   limits:
-    cpu: "500m"
-    memory: "512Mi"
+    cpu: "500m"                              # Max 0.5 CPU cores
+    memory: "512Mi"                          # Max 512MB RAM
 
-# Environment variables
+# Environment variables - configure Elasticsearch and S3 connections
 env:
   - name: FLUENT_ELASTICSEARCH_HOST
-    value: "elasticsearch-dev-master"
+    value: "elasticsearch-dev-master"        # ES service name (cluster DNS)
   - name: FLUENT_ELASTICSEARCH_PORT
-    value: "9200"
+    value: "9200"                            # ES REST API port
   - name: FLUENT_ELASTICSEARCH_SCHEME
-    value: "http"
+    value: "http"                            # HTTP for dev (no TLS)
   - name: FLUENT_ELASTICSEARCH_SSL_VERIFY
-    value: "false"
+    value: "false"                           # Skip SSL verification
   - name: FLUENT_ELASTICSEARCH_SSL_VERSION
-    value: "TLSv1_2"
+    value: "TLSv1_2"                         # TLS version if SSL enabled
   - name: FLUENT_ELASTICSEARCH_LOGSTASH_PREFIX
-    value: "kubernetes"
+    value: "kubernetes"                      # Index prefix in ES (kubernetes-YYYY.MM.DD)
   - name: FLUENT_S3_BUCKET
-    value: "eks-logs-312ubuntu-dev"
+    value: "eks-logs-312ubuntu-dev"          # S3 bucket for backup
   - name: FLUENT_S3_REGION
-    value: "us-east-1"
-  - name: K8S_NODE_NAME
+    value: "us-east-1"                       # S3 bucket region
+  - name: K8S_NODE_NAME                      # Inject node name into logs
     valueFrom:
       fieldRef:
         fieldPath: spec.nodeName
 
-# Mount container logs
+# Volume mounts - FluentD needs access to host log files
 volumes:
-  - name: varlog
+  - name: varlog                             # System logs
     hostPath:
       path: /var/log
-  - name: containers
+  - name: containers                         # Container logs (Docker/containerd)
     hostPath:
       path: /var/lib/docker/containers
-  - name: fluentd-config
+  - name: fluentd-config                     # FluentD config from ConfigMap
     configMap:
       name: fluentd-config
 
 volumeMounts:
   - name: varlog
     mountPath: /var/log
-    readOnly: true
+    readOnly: true                           # Read-only - FluentD only reads logs
   - name: containers
     mountPath: /var/lib/docker/containers
     readOnly: true
@@ -70,41 +73,44 @@ volumeMounts:
     mountPath: /fluentd/etc/fluent.conf
     subPath: fluent.conf
 
-# FluentD configuration with dual output
+# FluentD pipeline configuration (source -> filter -> output)
 fileConfigs:
+  # SOURCE: Where logs come from
   01_sources.conf: |-
     <source>
-      @type tail
+      @type tail                             # Tail log files (like tail -f)
       @id in_tail_container_logs
-      path /var/log/containers/*.log
-      pos_file /var/log/fluentd-containers.log.pos
-      tag kubernetes.*
-      read_from_head true
+      path /var/log/containers/*.log         # All container logs
+      pos_file /var/log/fluentd-containers.log.pos  # Track read position
+      tag kubernetes.*                       # Tag for routing
+      read_from_head true                    # Start from beginning on first run
       <parse>
-        @type json
-        time_format %Y-%m-%dT%H:%M:%S.%NZ
+        @type json                           # Container logs are JSON format
+        time_format %Y-%m-%dT%H:%M:%S.%NZ    # Timestamp format
       </parse>
     </source>
 
+  # FILTER: Enrich logs with metadata
   02_filters.conf: |-
     <filter kubernetes.**>
-      @type kubernetes_metadata
+      @type kubernetes_metadata              # Add pod name, namespace, labels, etc.
       @id filter_kube_metadata
     </filter>
 
     <filter kubernetes.**>
-      @type record_transformer
+      @type record_transformer               # Add custom fields to every log
       <record>
-        cluster_name temp-eks-cluster
-        environment dev
+        cluster_name temp-eks-cluster        # Which cluster this came from
+        environment dev                      # Which environment
       </record>
     </filter>
 
+  # OUTPUT: Where logs go (dual output: ES + S3)
   03_outputs.conf: |-
     <match kubernetes.**>
-      @type copy
+      @type copy                             # Send to multiple destinations
 
-      # Output to Elasticsearch
+      # OUTPUT 1: Elasticsearch for real-time search and Kibana visualization
       <store>
         @type elasticsearch
         @id out_es
@@ -112,57 +118,57 @@ fileConfigs:
         port "#{ENV['FLUENT_ELASTICSEARCH_PORT']}"
         scheme "#{ENV['FLUENT_ELASTICSEARCH_SCHEME']}"
         ssl_verify "#{ENV['FLUENT_ELASTICSEARCH_SSL_VERIFY']}"
-        logstash_format true
+        logstash_format true                 # Use date-based index names
         logstash_prefix "#{ENV['FLUENT_ELASTICSEARCH_LOGSTASH_PREFIX']}"
         type_name _doc
         include_tag_key true
         <buffer>
-          @type file
+          @type file                         # Buffer to disk before sending
           path /var/log/fluentd-buffers/kubernetes.system.buffer
-          flush_mode interval
-          flush_interval 5s
-          retry_type exponential_backoff
-          retry_forever false
-          retry_max_interval 30
-          chunk_limit_size 2M
-          queue_limit_length 8
-          overflow_action block
+          flush_mode interval                # Flush on schedule
+          flush_interval 5s                  # Every 5 seconds
+          retry_type exponential_backoff     # Retry with backoff on failure
+          retry_forever false                # Don't retry forever
+          retry_max_interval 30              # Max 30s between retries
+          chunk_limit_size 2M                # Max 2MB per chunk
+          queue_limit_length 8               # Max 8 chunks in queue
+          overflow_action block              # Block if queue full
         </buffer>
       </store>
 
-      # Output to S3 for backup/long-term storage
+      # OUTPUT 2: S3 for long-term backup and compliance
       <store>
         @type s3
         @id out_s3
         s3_bucket "#{ENV['FLUENT_S3_BUCKET']}"
         s3_region "#{ENV['FLUENT_S3_REGION']}"
-        path logs/%Y/%m/%d/
+        path logs/%Y/%m/%d/                  # Organize by date: logs/2026/02/03/
         <buffer time>
-          @type file
+          @type file                         # Buffer to disk
           path /var/log/fluentd-buffers/s3.buffer
-          timekey 3600
-          timekey_wait 10m
-          timekey_use_utc true
-          chunk_limit_size 256m
+          timekey 3600                       # New file every hour
+          timekey_wait 10m                   # Wait 10min after hour ends
+          timekey_use_utc true               # Use UTC timestamps
+          chunk_limit_size 256m              # Max 256MB per file
         </buffer>
         <format>
-          @type json
+          @type json                         # Store as JSON
         </format>
       </store>
     </match>
 
-# Tolerations to run on all nodes
+# Tolerations - allow FluentD to run on master/control-plane nodes too
 tolerations:
   - key: node-role.kubernetes.io/master
-    effect: NoSchedule
+    effect: NoSchedule                       # Run even on master nodes
   - key: node-role.kubernetes.io/control-plane
-    effect: NoSchedule
+    effect: NoSchedule                       # Run even on control-plane nodes
 
-# Node selector
+# Node placement - run on all nodes (DaemonSet default behavior)
 nodeSelector: {}
 
-# Update strategy
+# Update strategy - how to roll out updates
 updateStrategy:
-  type: RollingUpdate
+  type: RollingUpdate                        # Update one at a time
   rollingUpdate:
-    maxUnavailable: 1
+    maxUnavailable: 1                        # Only 1 pod down during update

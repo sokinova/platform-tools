@@ -1,69 +1,69 @@
 # Kibana Helm values for dev environment
 # Chart: elastic/kibana v8.5.1
+# Web UI for viewing and querying Elasticsearch logs
 
+# Cluster size - single replica for dev
 replicas: 1
 
-# Elasticsearch connection
-elasticsearchHosts: "http://elasticsearch-dev-master:9200"
+# Elasticsearch connection - where Kibana fetches data from
+elasticsearchHosts: "http://elasticsearch-dev-master:9200"  # Internal cluster DNS
 
-# Protocol for Elasticsearch connection (http for dev, https for prod)
+# Protocol - HTTP for dev (ES security disabled), HTTPS for staging/prod
 protocol: http
 
-# Disable managed service account token since ES security is disabled
+# Disable service account token generation (not needed when ES security is off)
 managedServiceAccount: false
 
-# Resource configuration - minimal for dev
+# Resource limits - minimal for dev
 resources:
   requests:
-    cpu: "250m"
-    memory: "512Mi"
+    cpu: "250m"                              # 0.25 CPU cores
+    memory: "512Mi"                          # 512MB RAM
   limits:
-    cpu: "500m"
-    memory: "1Gi"
+    cpu: "500m"                              # Max 0.5 CPU cores
+    memory: "1Gi"                            # Max 1GB RAM
 
-# Kibana configuration
+# Kibana configuration file
 kibanaConfig:
   kibana.yml: |
-    server.name: kibana-dev
-    server.host: "0.0.0.0"
-    elasticsearch.hosts: ["http://elasticsearch-dev-master:9200"]
-    monitoring.ui.container.elasticsearch.enabled: true
+    server.name: kibana-dev                  # Instance name shown in UI
+    server.host: "0.0.0.0"                   # Listen on all interfaces
+    elasticsearch.hosts: ["http://elasticsearch-dev-master:9200"]  # ES endpoint
+    monitoring.ui.container.elasticsearch.enabled: true  # Enable ES monitoring
 
-# Health check
+# Health check endpoint - Kibana ready when this returns 200
 healthCheckPath: "/app/kibana"
 
-# Service - ClusterIP, exposed via Ingress
+# Service - ClusterIP means internal only, Ingress handles external access
 service:
-  type: ClusterIP
-  port: 5601
+  type: ClusterIP                            # No external LB, use Ingress instead
+  port: 5601                                 # Kibana default port
 
-# Ingress - disabled here, managed separately
+# Ingress - disabled here because we manage it separately with IP whitelist
 ingress:
   enabled: false
 
-# Security context
+# Security context - run as non-root user (security best practice)
 securityContext:
   capabilities:
     drop:
-      - ALL
-  runAsNonRoot: true
-  runAsUser: 1000
+      - ALL                                  # Drop all Linux capabilities
+  runAsNonRoot: true                         # Don't run as root
+  runAsUser: 1000                            # Run as user ID 1000
 
-# Pod security context
+# Pod security - filesystem group for volume permissions
 podSecurityContext:
-  fsGroup: 1000
+  fsGroup: 1000                              # Group ID for mounted volumes
 
-# Readiness probe
+# Readiness probe - when is pod ready to receive traffic
 readinessProbe:
-  failureThreshold: 3
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  successThreshold: 3
-  timeoutSeconds: 5
+  failureThreshold: 3                        # Fail after 3 consecutive failures
+  initialDelaySeconds: 10                    # Wait 10s before first check
+  periodSeconds: 10                          # Check every 10s
+  successThreshold: 3                        # Need 3 successes to be ready
+  timeoutSeconds: 5                          # Each check times out after 5s
 
-# Node selector
+# Node placement - empty means any node
 nodeSelector: {}
-
 tolerations: []
-
 affinity: {}

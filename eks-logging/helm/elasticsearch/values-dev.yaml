@@ -2,67 +2,67 @@
 # Chart: elastic/elasticsearch v8.5.1
 # Single node configuration for development
 
+# Cluster size - single node for dev (no HA needed)
 replicas: 1
-minimumMasterNodes: 1
+minimumMasterNodes: 1                        # Minimum nodes to form a cluster
 
-# Resource configuration - minimal for dev
+# Resource limits - minimal for dev to save costs
 resources:
   requests:
-    cpu: "500m"
-    memory: "1Gi"
+    cpu: "500m"                              # 0.5 CPU cores requested
+    memory: "1Gi"                            # 1GB RAM requested
   limits:
-    cpu: "1000m"
-    memory: "2Gi"
+    cpu: "1000m"                             # Max 1 CPU core
+    memory: "2Gi"                            # Max 2GB RAM
 
-# JVM heap - should be ~50% of memory limit
-esJavaOpts: "-Xmx512m -Xms512m"
+# JVM heap - should be ~50% of memory limit (ES recommendation)
+esJavaOpts: "-Xmx512m -Xms512m"              # Min and max heap size
 
-# Persistence - disabled for dev (using emptyDir)
-# EBS CSI driver not available on this cluster
-# For staging/prod, ensure EBS CSI driver is installed first
+# Persistence - DISABLED for dev (data lost on pod restart)
+# Reason: EBS CSI driver not available on this cluster
+# For staging/prod: Enable this and ensure EBS CSI driver is installed
 persistence:
-  enabled: false
+  enabled: false                             # Uses emptyDir instead of PVC
 
-# Single node discovery
+# Health check - accept yellow status (normal for single node)
 clusterHealthCheckParams: "wait_for_status=yellow&timeout=1s"
 
-# Security - disabled for dev simplicity
-# Enable xpack security for staging/prod
+# Security - DISABLED for dev simplicity (uses HTTP not HTTPS)
+# For staging/prod: Remove this block to enable default security
 esConfig:
   elasticsearch.yml: |
-    xpack.security.enabled: false
-    xpack.security.enrollment.enabled: false
-    cluster.name: "elasticsearch-dev"
-    network.host: 0.0.0.0
+    xpack.security.enabled: false            # No authentication required
+    xpack.security.enrollment.enabled: false # No node enrollment
+    cluster.name: "elasticsearch-dev"        # Cluster identifier
+    network.host: 0.0.0.0                    # Listen on all interfaces
 
-# Pod antiaffinity - disabled for single node dev
+# Pod placement - soft anti-affinity allows multiple pods on same node
 antiAffinity: "soft"
 
-# Node selector - optional, can target specific node groups
+# Node targeting - empty means schedule on any node
 nodeSelector: {}
-
 tolerations: []
 
-# Service configuration
+# Service - ClusterIP means internal-only access (no external LB)
 service:
-  type: ClusterIP
-  httpPortName: http
-  transportPortName: transport
+  type: ClusterIP                            # Only accessible within cluster
+  httpPortName: http                         # Port 9200 for REST API
+  transportPortName: transport               # Port 9300 for node-to-node
 
-# Ingress - disabled, accessed via Kibana
+# Ingress - disabled because users access ES through Kibana, not directly
 ingress:
   enabled: false
 
-# Readiness probe
+# Readiness probe - when is the pod ready to receive traffic
 readinessProbe:
-  failureThreshold: 3
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  successThreshold: 3
-  timeoutSeconds: 5
+  failureThreshold: 3                        # Fail after 3 consecutive failures
+  initialDelaySeconds: 10                    # Wait 10s before first check
+  periodSeconds: 10                          # Check every 10s
+  successThreshold: 3                        # Need 3 successes to be ready
+  timeoutSeconds: 5                          # Each check times out after 5s
 
-# Lifecycle hooks for graceful shutdown
+# Graceful shutdown - wait before terminating to finish requests
 lifecycle:
   preStop:
     exec:
-      command: ["/bin/sh", "-c", "sleep 20"]
+      command: ["/bin/sh", "-c", "sleep 20"] # Wait 20s for connections to drain
