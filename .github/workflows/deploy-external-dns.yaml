@@ -1,12 +1,10 @@
-# This worflow is primarily for platform/devops tools that need to be deployed into K8s cluster
-# or tools that don't belong to Terraform
-name: 'Workflow - Deploy Platform Tools'
+---
+name: "Workflow - Deploy External DNS to EKS Cluster"
 
-on:
+"on":
   push:
     branches:
-      - feature/**
-      - main
+      - feature/MRP25BUBUN-9-external-dns
 
 permissions:
   id-token: write
@@ -14,14 +12,15 @@ permissions:
 
 env:
   AWS_REGION: "us-east-1"
-  ENVIRONMENT_STAGE: "dev"
 
 jobs:
   deploy-platform-tools:
     runs-on: ubuntu-latest
+
     defaults:
       run:
         shell: bash
+
     environment: dev
 
     steps:
@@ -34,29 +33,29 @@ jobs:
           role-session-name: GitHubActionsRoleSession
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
       # Login to EKS, make sure to switch to the permanent cluster created with terraform once it's up
       - name: Login to EKS - update kubeconfig
-        run: aws eks update-kubeconfig --name temporary-eks-cluster-${ENVIRONMENT_STAGE} --region $AWS_REGION
+        run: >
+          aws eks update-kubeconfig
+          --name temp-eks-cluster
+          --region $AWS_REGION
 
-      # Add deployment steps for each tool below
-      - name: Deploy ingress-nginx controller
-        run: kubectl apply -f ingress-nginx/deploy.yaml
-
-      # Example for a tool like Karpenter
-      - name: Deploy Karpenter
+      - name: Deploy external-dns (Helm)  # deploy from LOCAL chart + local values
         run: |
-            echo "Deploy Karpenter steps go here"
+          helm lint external-dns/external-dns-helm  # validate chart
+          helm upgrade --install external-dns external-dns/external-dns-helm \
+            --namespace external-dns \
+            -f external-dns/external-dns-helm/values.yaml \
+            --rollback-on-failure \
 
-      # Example for a tool like EKS Logging
-      - name: Deploy EKS Logging
+      - name: Verify external-dns rollout  # make sure pods are healthy
         run: |
-            echo "Deploy EKS Logging steps go here"
-
-      # Repeat for each additional tool...
-      # Example: Deploy External DNS
-      # Example: Setup K8s User Roles
-
-      - name: Finalize Deployment
-        run: |
-            echo "Final deployment steps and cleanup"
-
+          kubectl get pods -n external-dns
+          kubectl rollout status deploy/external-dns \
+            -n external-dns \
+            --timeout=180s
