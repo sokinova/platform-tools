@@ -17,13 +17,11 @@ resources:
 # JVM heap - should be ~50% of memory limit
 esJavaOpts: "-Xmx512m -Xms512m"
 
-# Persistence
-volumeClaimTemplate:
-  accessModes: ["ReadWriteOnce"]
-  resources:
-    requests:
-      storage: 10Gi
-  storageClassName: gp2
+# Persistence - disabled for dev (using emptyDir)
+# EBS CSI driver not available on this cluster
+# For staging/prod, ensure EBS CSI driver is installed first
+persistence:
+  enabled: false
 
 # Single node discovery
 clusterHealthCheckParams: "wait_for_status=yellow&timeout=1s"

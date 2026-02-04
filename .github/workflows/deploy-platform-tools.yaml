@@ -35,8 +35,9 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       # Login to EKS, make sure to switch to the permanent cluster created with terraform once it's up
+      # NOTE: Current dev cluster is "temp-eks-cluster" (no env suffix)
       - name: Login to EKS - update kubeconfig
-        run: aws eks update-kubeconfig --name temporary-eks-cluster-${ENVIRONMENT_STAGE} --region $AWS_REGION
+        run: aws eks update-kubeconfig --name temp-eks-cluster --region $AWS_REGION
 
       # Install Helm
       - name: Install Helm
@@ -85,11 +86,18 @@ jobs:
             -n logging \
             --timeout=300s
 
+      # NOTE: Dev uses --no-hooks because ES security is disabled (HTTP not HTTPS)
+      # Staging/Prod have ES security enabled, so hooks work correctly
       - name: Deploy Kibana
         run: |
+          HOOKS_FLAG=""
+          if [ "${ENVIRONMENT_STAGE}" == "dev" ]; then
+            HOOKS_FLAG="--no-hooks"
+          fi
           helm upgrade --install kibana-${ENVIRONMENT_STAGE} elastic/kibana \
             --namespace logging \
             --values eks-logging/helm/kibana/values-${ENVIRONMENT_STAGE}.yaml \
+            ${HOOKS_FLAG} \
             --wait \
             --timeout 5m
 

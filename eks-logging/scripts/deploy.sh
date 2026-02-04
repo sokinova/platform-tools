@@ -78,10 +78,17 @@ kubectl wait --for=condition=ready pod \
 echo ""
 
 # Step 5: Deploy Kibana
+# NOTE: Dev uses --no-hooks because ES security is disabled (HTTP not HTTPS)
+# Staging/Prod have ES security enabled, so hooks work correctly
 echo "[5/7] Deploying Kibana..."
+HOOKS_FLAG=""
+if [[ "${ENVIRONMENT}" == "dev" ]]; then
+  HOOKS_FLAG="--no-hooks"
+fi
 helm upgrade --install kibana-${ENVIRONMENT} elastic/kibana \
   --namespace ${NAMESPACE} \
   --values ${ROOT_DIR}/helm/kibana/values-${ENVIRONMENT}.yaml \
+  ${HOOKS_FLAG} \
   --wait \
   --timeout 5m
 echo ""

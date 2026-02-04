@@ -6,6 +6,12 @@ replicas: 1
 # Elasticsearch connection
 elasticsearchHosts: "http://elasticsearch-dev-master:9200"
 
+# Protocol for Elasticsearch connection (http for dev, https for prod)
+protocol: http
+
+# Disable managed service account token since ES security is disabled
+managedServiceAccount: false
+
 # Resource configuration - minimal for dev
 resources:
   requests:
