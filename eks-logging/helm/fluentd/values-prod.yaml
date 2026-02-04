@@ -95,7 +95,7 @@ fileConfigs:
     <filter kubernetes.**>
       @type record_transformer
       <record>
-        cluster_name temp-eks-cluster-prod
+        cluster_name temporary-eks-cluster-prod
         environment prod
       </record>
     </filter>
