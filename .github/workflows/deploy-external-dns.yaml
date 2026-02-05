@@ -53,6 +53,12 @@ jobs:
             --create-namespace $NAMESPACE \
             -f external-dns/external-dns-helm/values.yaml \
             --rollback-on-failure
+        run: >
+          helm upgrade --install external-dns external-dns/external-dns-helm
+          --namespace $NAMESPACE
+          --create-namespace
+          -f external-dns/external-dns-helm/values.yaml
+          --atomic
 
       - name: Verify external-dns rollout  # make sure pods are healthy
         run: |
