@@ -60,12 +60,10 @@ No action required. Helm revisions allow rollback and change tracking.
 
 ### Deploy External DNS using Helm in the dev
 ```bash
-helm upgrade --install external-dns . \
-  -f values.yaml \
-  -f values-dev.yaml \
+
+helm upgrade --install external-dns external-dns/external-dns-helm \
   -n external-dns \
-  --rollback-on-failure \
-  --description "Dev rollout: switch external-dns policy to sync (IRSA enabled)"
+  -f external-dns/external-dns-helm/values.yaml \
 
 ```
 
