@@ -23,7 +23,7 @@ Grafana and alerting will be added in later stages once the Prometheus foundatio
 deploy Prometheus: 
 ```bash
 helm upgrade --install eks-monitoring ./helm \
-  -n eks-monitoring --create-namespace \
+  -n eks-monitoring-dev --create-namespace \
   -f ./helm/values/dev-values.yaml
 ```
 validate and check running pods:
@@ -32,7 +32,7 @@ kubectl get pods -n eks-monitoring
 ```
 to get acsses to prometheus ui:
 ```bash
-kubectl -n eks-monitoring port-forward svc/eks-monitoring-prometheus 9090:9090
+kubectl -n eks-monitoring-dev port-forward svc/eks-monitoring-prometheus 9090:9090
 ```
 then open http://localhost:9090
 

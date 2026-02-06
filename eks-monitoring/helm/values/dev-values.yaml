@@ -28,8 +28,13 @@ nodeExporter:
 
 grafana:
   enabled: true
+  admin: 
+    user: admin
+    password: ChangeMe-Strong123!
 
   ingress:
     enabled: true
     className: nginx
     host: grafana-ubuntu-dev.312ubuntu.com
+    tlsSecretName: wildcard-312ubuntu-tls
+    whitelistSourceRange: "98.212.25.205/32"

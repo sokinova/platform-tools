@@ -19,4 +19,10 @@ spec:
                 name: grafana
                 port:
                   number: {{ .Values.grafana.service.port }}
+  tls:
+  - hosts:
+      - {{ .Values.grafana.ingress.host }}
+    secretName: {{ .Values.grafana.ingress.tlsSecretName }}
+
+
 {{- end }}

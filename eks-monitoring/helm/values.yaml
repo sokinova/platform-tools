@@ -38,7 +38,8 @@ grafana:
     enabled: false
     className: nginx
     host: ""
-    whitelistSourceRange: ""
+    whitelistSourceRange: "98.212.25.205/32"
+    tlsSecretName: wildcard-312ubuntu-tls
 
   admin:
     existingSecretName: grafana-admin
