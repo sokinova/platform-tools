@@ -1,17 +1,17 @@
 # External-DNS Automated Test
 
-This folder contains **temporary Kubernetes resources** used by the GitHub Actions pipeline to **verify external-dns functionality end-to-end**.
+This folder contains **temporary Kubernetes resources** used by the GitHub Actions pipeline to **verify external-dns end-to-end**.
 
-The goal:
-> If external-dns is working correctly, a DNS record should be created automatically from an annotated Ingress and traffic should resolve successfully.
+**Goal**
+If external-dns is working correctly, an annotated Ingress should automatically create a DNS record and traffic should resolve successfully.
 
- **These resources are created during CI, validated, and deleted automatically**.
+**These resources are created during CI, validated, and deleted automatically.**
 
 ---
 
 ## What Gets Created
 
-### Deployment (`test-deploy.yaml`)
+### Deployment
 A minimal `nginx` Deployment used as a stable HTTP backend.
 
 **Why it exists**
@@ -21,12 +21,11 @@ A minimal `nginx` Deployment used as a stable HTTP backend.
 
 **Key points**
 - Single replica
-- Runs in the `external-dns` namespace
 - Exposes port `80`
 
 ---
 
-### Service (`test-deploy.yaml`)
+### Service
 A ClusterIP Service that exposes the Deployment internally.
 
 **Why it exists**
@@ -39,7 +38,7 @@ A ClusterIP Service that exposes the Deployment internally.
 
 ---
 
-### Ingress (`test-ingress.yaml`)
+### Ingress
 The core of the test.  
 This Ingress is annotated so `external-dns` can detect it and create a DNS record in Route 53.
 
@@ -49,12 +48,15 @@ This Ingress is annotated so `external-dns` can detect it and create a DNS recor
 - Simulates real production usage
 
 **Important annotation**
-```yaml
-external-dns.alpha.kubernetes.io/hostname: dns-test.312ubuntu.com
+external-dns.alpha.kubernetes.io/hostname: dns-test.312ubuntu.com 
 
 
 How the test works (logic):
-1) Deployment creates Pods labeled app=dns-test
-2) Service selects those Pods (selector app=dns-test) and exposes port 80
-3) Ingress routes traffic to the Service and defines the hostname
-4) external-dns detects the annotation and creates the DNS record
+1. Deployment creates Pods labeled app=dns-test
+2. Service selects those Pods and exposes port 80
+3. Ingress routes traffic to the Service and defines the hostname
+4. external-dns detects the annotation and creates the DNS record
+5. CI validates DNS + HTTP, then deletes the test resources
+
+- **Pass** = `nslookup` resolves + `curl` returns success  
+- **Fail**  = DNS never appears or HTTP doesn’t route
