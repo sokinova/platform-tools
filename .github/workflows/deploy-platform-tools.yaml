@@ -246,5 +246,3 @@ jobs:
           WILDCARD_SECRET_NAME: wildcard-312ubuntu-tls
           WILDCARD_CERT_NAME: wildcard-312ubuntu-tls
         run: ./tls-bootstrap/bootstrap-tls.sh
-
-

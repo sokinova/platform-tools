@@ -47,12 +47,6 @@ jobs:
           --region $AWS_REGION
 
       - name: Deploy external-dns (Helm)  
-        run: |
-          helm lint external-dns/external-dns-helm  # validate chart
-          helm upgrade --install external-dns external-dns/external-dns-helm \ 
-            --create-namespace $NAMESPACE \
-            -f external-dns/external-dns-helm/values.yaml \
-            --rollback-on-failure
         run: >
           helm upgrade --install external-dns external-dns/external-dns-helm
           --namespace $NAMESPACE
