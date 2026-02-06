@@ -1,10 +1,10 @@
 global:
   team: ubuntu
-  environment: prod
+  environment: dev
 
 namespace:
   create: true
-  name: eks-monitoring-prod
+  name: eks-monitoring
 
 prometheus:
   enabled: true
@@ -25,13 +25,3 @@ kubeStateMetrics:
 nodeExporter:
   enabled: true
   image: prom/node-exporter:v1.8.1
-
-grafana:
-  enabled: true
-  admin: 
-    user: admin
-    password: ChangeMe-Strong123!
-  ingress:
-    enabled: true
-    className: nginx
-    host: grafana-ubuntu-prod.312ubuntu.com

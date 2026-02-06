@@ -16,6 +16,14 @@ Grafana and alerting will be added in later stages once the Prometheus foundatio
 - Prometheus server tested to be deployed to the EKS cluster
 - tested to be deployed via a **custom Helm chart** (no public charts)
 
+### Grafana
+- created templates to deploy Grafana
+- Grafana tested in dev environment
+- Deployed in our EKS cluster
+- created login and password 
+- configured ingress 
+- implemented tls certificate for secure connection to https://grafana-ubuntu-dev.312ubuntu.com/login
+
 ### Helm
 - created the helm chart structure
 
@@ -35,6 +43,9 @@ to get acsses to prometheus ui:
 kubectl -n eks-monitoring-dev port-forward svc/eks-monitoring-prometheus 9090:9090
 ```
 then open http://localhost:9090
+
+deployed Grafana
+
 
 ## Resources
   - https://prometheus.io/docs/

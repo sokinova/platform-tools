@@ -1,0 +1,25 @@
+global:
+  team: ubuntu
+  environment: staging
+
+namespace:
+  create: true
+  name: eks-monitoring-staging
+
+grafana:
+  enabled: false
+  image: grafana/grafana:11.1.0
+  replicas: 1
+
+  service:
+    port: 3000
+
+  datasources:
+    enabled: true
+    
+  ingress:
+    enabled: true
+    className: nginx
+    host: grafana-ubuntu-dev.312ubuntu.com
+    tlsSecretName: wildcard-312ubuntu-tls
+    whitelistSourceRange: "98.212.25.205/32"
