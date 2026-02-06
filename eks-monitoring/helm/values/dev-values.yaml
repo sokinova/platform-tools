@@ -28,7 +28,7 @@ nodeExporter:
 
 grafana:
   enabled: true
-  
+
   ingress:
     enabled: true
     className: nginx

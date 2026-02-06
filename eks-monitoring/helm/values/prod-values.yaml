@@ -28,8 +28,10 @@ nodeExporter:
 
 grafana:
   enabled: true
-  
+  admin: 
+    user: admin
+    password: ChangeMe-Strong123!
   ingress:
     enabled: true
     className: nginx
-    host: grafana-ubuntu-dev.312ubuntu.com
+    host: grafana-ubuntu-prod.312ubuntu.com

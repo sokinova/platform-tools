@@ -32,4 +32,5 @@ grafana:
   ingress:
     enabled: true
     className: nginx
-    host: grafana-ubuntu-dev.312ubuntu.com
+    host: grafana-ubuntu-staging.312ubuntu.com
+
