@@ -11,6 +11,6 @@ data:
       - name: Prometheus
         type: prometheus
         access: proxy
-        url: http://{{ .Values.namespace.name }}-prometheus:{{ .Values.prometheus.service.port }} 
+        url: {{ .Values.namespace.name }}-prometheus:{{ .Values.prometheus.service.port }} 
         isDefault: true
 {{- end }}

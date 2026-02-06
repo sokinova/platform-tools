@@ -7,7 +7,7 @@ namespace:
   name: eks-monitoring-dev
 
 grafana:
-  enabled: false
+  enabled: true
   image: grafana/grafana:11.1.0
   replicas: 1
 
@@ -20,6 +20,8 @@ grafana:
 
   datasources:
     enabled: true
+    prometheus:
+      url: "http://eks-monitoring-dev-prometheus:9090"
     
   ingress:
     enabled: true
@@ -27,3 +29,12 @@ grafana:
     host: grafana-ubuntu-dev.312ubuntu.com
     tlsSecretName: wildcard-312ubuntu-tls
     whitelistSourceRange: "98.212.25.205/32"
+
+prometheus:
+  enabled: true
+  image: prom/prometheus:v2.52.0
+  replicas: 1
+
+  service:
+    type: ClusterIP
+    port: 9090

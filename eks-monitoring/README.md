@@ -34,6 +34,14 @@ helm upgrade --install eks-monitoring ./helm \
   -n eks-monitoring-dev --create-namespace \
   -f ./helm/values/dev-values.yaml
 ```
+
+deploy Grafana:
+```bash
+helm upgrade --install eks-monitoring ./helm-grafana \
+  -n eks-monitoring-dev --create-namespace \
+  -f ./helm-grafana/values/dev-values.yaml
+```
+
 validate and check running pods:
 ```bash
 kubectl get pods -n eks-monitoring
