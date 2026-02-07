@@ -5,6 +5,7 @@ metadata:
   name: grafana
   namespace: {{ .Values.namespace.name }}
   annotations:
+    external-dns.alpha.kubernetes.io/hostname: {{ .Values.grafana.ingress.host | quote }}
     nginx.ingress.kubernetes.io/whitelist-source-range: {{ .Values.grafana.ingress.whitelistSourceRange | quote }}
 spec:
   ingressClassName: {{ .Values.grafana.ingress.className }}

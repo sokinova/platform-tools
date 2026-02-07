@@ -23,7 +23,8 @@ Grafana and alerting will be added in later stages once the Prometheus foundatio
 - created login and password 
 - configured ingress 
 - implemented tls certificate for secure connection to https://grafana-ubuntu-dev.312ubuntu.com/login
-
+- added annottion 
+- aws
 ### Helm
 - created the helm chart structure
 
@@ -37,7 +38,7 @@ helm upgrade --install eks-monitoring ./helm \
 
 deploy Grafana:
 ```bash
-helm upgrade --install eks-monitoring ./helm-grafana \
+helm upgrade --install eks-monitoring-grafana ./helm-grafana \
   -n eks-monitoring-dev --create-namespace \
   -f ./helm-grafana/values/dev-values.yaml
 ```

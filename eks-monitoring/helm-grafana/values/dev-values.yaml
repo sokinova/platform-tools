@@ -28,7 +28,7 @@ grafana:
     className: nginx
     host: grafana-ubuntu-dev.312ubuntu.com
     tlsSecretName: wildcard-312ubuntu-tls
-    whitelistSourceRange: "98.212.25.205/32"
+    whitelistSourceRange: "0.0.0.0/0"
 
 prometheus:
   enabled: true
