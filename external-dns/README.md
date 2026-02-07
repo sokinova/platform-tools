@@ -45,18 +45,34 @@ Each helm upgrade creates a new Helm revision (expected behavior).
 **Resolution:**
 No action required. Helm revisions allow rollback and auditing.
 
-### Multiple Helm revisions during deployment
+### CI/CD workflow failed due to syntax errors
 
-**Cause:**  
-Each `helm upgrade` creates a new Helm revision (expected Helm behavior).
+**Cause:**
+The GitHub Actions workflow contained YAML and command syntax issues, including incorrect indentation, empty steps, and a malformed helm upgrade command missing required arguments.
+Because CI/CD is strict, the workflow failed before deployment could run.
 
-**Resolution:**  
-No action required. Helm revisions allow rollback and change tracking.
+**Resolution:**
+- Fixed YAML indentation and step structure
+- Removed empty or incomplete steps
+- Validated syntax locally before pushing changes
+
 
 ---
 
 ## How to Run/Execute
-[Guidelines on how to implement and use External DNS]
+1. Ensure prerequisites
+   - EKS cluster is running
+   - OIDC provider is enabled
+   - IAM role (IRSA) exists with Route53 permissions
+2. Configure External-DNS (values.yaml)
+   - Set ServiceAccount name and annotate it with the IRSA role ARN
+   - Configure filters and ownership:
+     - annotationFilter – limits which Ingress resources External-DNS manages
+     - txtOwnerId – unique identifier to claim DNS record ownership (usually the cluster name)
+     - txtPrefix – prefix added to TXT records to avoid conflicts with other External-DNS instances
+3. Deploy via CI/CD
+   - Push changes to the feature branch
+   -  GitHub Actions deploys External-DNS via Helm, then runs integration tests that provision a test Ingress and validate DNS (nslookup) and connectivity (curl)
 
 ### Deploy External DNS using Helm in the dev
 ```bash
@@ -97,17 +113,20 @@ aws route53 list-resource-record-sets --hosted-zone-id <HOSTED_ZONE_ID>
 ---
 
 ## Resources
-- External DNS GitHub
+External DNS GitHub
 https://github.com/kubernetes-sigs/external-dns
 
 External DNS Helm Chart
 https://github.com/kubernetes-sigs/external-dns/tree/master/charts/external-dns
 
-AWS IRSA Documentation
-https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html
-
 AWS Route53 Documentation
 https://docs.aws.amazon.com/route53/
+
+ExternalDNS w. EKS and Route53
+https://joachim8675309.medium.com/externaldns-w-eks-and-route53-pt3-9a71ab08c6bb
+
+Expose Kubernetes Service with External DNS and Route53
+https://peiruwang.medium.com/eks-exposing-service-with-external-dns-3be8facc73b9
 
 ---
 

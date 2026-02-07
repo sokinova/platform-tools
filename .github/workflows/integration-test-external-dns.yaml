@@ -5,6 +5,10 @@ on:
   push:
     branches:
       - feature/MRP25BUBUN-9-external-dns
+      - main
+  pull_request:
+    branches:
+      - main
 
 permissions:
   id-token: write

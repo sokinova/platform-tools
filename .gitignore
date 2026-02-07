@@ -27,4 +27,8 @@ override.tf.json
 .terraformrc
 terraform.rc
 
+<<<<<<< HEAD
 .DS_Store
+=======
+*.DS_Store*
+>>>>>>> 415147e (added main branch to workflow and improved README)
