@@ -1,119 +1,146 @@
 # FluentD Helm values for prod environment
 # Chart: fluent/fluentd v0.5.2
-# DaemonSet with dual output: Elasticsearch + S3
+# Log collector that runs on every node and sends logs to Elasticsearch
 
+# DaemonSet means one pod runs on every node automatically
 kind: DaemonSet
 
+# Container image with Elasticsearch plugin
 image:
   repository: fluent/fluentd-kubernetes-daemonset
   tag: v1.16-debian-elasticsearch8-1
 
-# ServiceAccount with IRSA for S3 access
+# ServiceAccount with IRSA - allows FluentD to write to S3 without hardcoded credentials
+# The ${AWS_ACCOUNT_ID} placeholder is replaced at deploy time by the script
 serviceAccount:
-  create: true
-  name: fluentd-prod
+  create: true                               # Helm creates the ServiceAccount
+  name: fluentd-prod                         # ServiceAccount name
   annotations:
-    eks.amazonaws.com/role-arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/fluentd-s3-prod"
+    eks.amazonaws.com/role-arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/fluentd-s3-prod"  # IAM role for S3 access
 
 # Resource configuration - production grade
 resources:
   requests:
-    cpu: "500m"
-    memory: "1Gi"
+    cpu: "500m"                              # 0.5 CPU cores
+    memory: "1Gi"                            # 1GB RAM
   limits:
-    cpu: "2000m"
-    memory: "2Gi"
+    cpu: "2000m"                             # Max 2 CPU cores
+    memory: "2Gi"                            # Max 2GB RAM
 
-# Environment variables
+# Environment variables - configure Elasticsearch connection
 env:
-  - name: FLUENT_ELASTICSEARCH_HOST
-    value: "elasticsearch-prod-master"
-  - name: FLUENT_ELASTICSEARCH_PORT
-    value: "9200"
-  - name: FLUENT_ELASTICSEARCH_SCHEME
-    value: "http"
-  - name: FLUENT_ELASTICSEARCH_SSL_VERIFY
-    value: "false"
-  - name: FLUENT_ELASTICSEARCH_SSL_VERSION
-    value: "TLSv1_2"
-  - name: FLUENT_ELASTICSEARCH_LOGSTASH_PREFIX
-    value: "kubernetes"
-  - name: FLUENT_S3_BUCKET
-    value: "eks-logs-312ubuntu-prod"
-  - name: FLUENT_S3_REGION
-    value: "us-east-1"
-  - name: K8S_NODE_NAME
+  - name: K8S_NODE_NAME                      # Inject node name into logs
     valueFrom:
       fieldRef:
         fieldPath: spec.nodeName
 
-# Mount container logs
-volumes:
-  - name: varlog
-    hostPath:
-      path: /var/log
-  - name: containers
-    hostPath:
-      path: /var/lib/docker/containers
-  - name: fluentd-config
-    configMap:
-      name: fluentd-config
-
-volumeMounts:
-  - name: varlog
-    mountPath: /var/log
-    readOnly: true
-  - name: containers
-    mountPath: /var/lib/docker/containers
-    readOnly: true
-  - name: fluentd-config
-    mountPath: /fluentd/etc/fluent.conf
-    subPath: fluent.conf
-
-# FluentD configuration with dual output
+# FluentD pipeline configuration
+# IMPORTANT: Must override ALL default fileConfigs (01-04) to prevent
+# chart defaults from trying to authenticate to ES with user/password
 fileConfigs:
+  # SOURCE: Tail container logs and expose Prometheus metrics
   01_sources.conf: |-
     <source>
       @type tail
       @id in_tail_container_logs
+      @label @KUBERNETES
       path /var/log/containers/*.log
       pos_file /var/log/fluentd-containers.log.pos
       tag kubernetes.*
       read_from_head true
       <parse>
-        @type json
-        time_format %Y-%m-%dT%H:%M:%S.%NZ
+        @type multi_format
+        <pattern>
+          format json
+          time_key time
+          time_type string
+          time_format "%Y-%m-%dT%H:%M:%S.%NZ"
+          keep_time_key false
+        </pattern>
+        <pattern>
+          format regexp
+          expression /^(?<time>.+) (?<stream>stdout|stderr)( (.))? (?<log>.*)$/
+          time_format '%Y-%m-%dT%H:%M:%S.%NZ'
+          keep_time_key false
+        </pattern>
       </parse>
+      emit_unmatched_lines true
     </source>
 
+    <source>
+      @type prometheus
+      bind 0.0.0.0
+      port 24231
+      metrics_path /metrics
+    </source>
+
+  # FILTER: Enrich logs with K8s metadata and custom fields
   02_filters.conf: |-
-    <filter kubernetes.**>
-      @type kubernetes_metadata
-      @id filter_kube_metadata
-    </filter>
+    <label @KUBERNETES>
+      <match kubernetes.var.log.containers.fluentd**>
+        @type relabel
+        @label @FLUENT_LOG
+      </match>
 
-    <filter kubernetes.**>
-      @type record_transformer
-      <record>
-        cluster_name temporary-eks-cluster-prod
-        environment prod
-      </record>
-    </filter>
+      <filter kubernetes.**>
+        @type kubernetes_metadata
+        @id filter_kube_metadata
+        skip_labels false
+        skip_container_metadata false
+        skip_namespace_metadata true
+        skip_master_url true
+      </filter>
 
-  03_outputs.conf: |-
-    <match kubernetes.**>
-      @type copy
+      <filter kubernetes.**>
+        @type record_transformer
+        <record>
+          cluster_name temporary-eks-cluster-prod
+          environment prod
+        </record>
+      </filter>
 
-      # Output to Elasticsearch
-      <store>
+      <match **>
+        @type relabel
+        @label @DISPATCH
+      </match>
+    </label>
+
+  # DISPATCH: Prometheus metrics then forward to output
+  03_dispatch.conf: |-
+    <label @DISPATCH>
+      <filter **>
+        @type prometheus
+        <metric>
+          name fluentd_input_status_num_records_total
+          type counter
+          desc The total number of incoming records
+          <labels>
+            tag ${tag}
+            hostname ${hostname}
+          </labels>
+        </metric>
+      </filter>
+
+      <match **>
+        @type relabel
+        @label @OUTPUT
+      </match>
+    </label>
+
+  # OUTPUT: Send to Elasticsearch
+  # NOTE: S3 backup requires a custom image with fluent-plugin-s3
+  # The base elasticsearch8 image does not include the S3 plugin
+  04_outputs.conf: |-
+    <label @OUTPUT>
+      <match **>
         @type elasticsearch
-        @id out_es
-        host "#{ENV['FLUENT_ELASTICSEARCH_HOST']}"
-        port "#{ENV['FLUENT_ELASTICSEARCH_PORT']}"
-        scheme "#{ENV['FLUENT_ELASTICSEARCH_SCHEME']}"
-        ssl_verify "#{ENV['FLUENT_ELASTICSEARCH_SSL_VERIFY']}"
+        host "elasticsearch-master"
+        port 9200
+        scheme http
+        ssl_verify false
+        verify_es_version_at_startup false
         logstash_format true
-        logstash_prefix "#{ENV['FLUENT_ELASTICSEARCH_LOGSTASH_PREFIX']}"
+        logstash_prefix kubernetes
         type_name _doc
         include_tag_key true
         <buffer>
@@ -128,44 +155,24 @@ fileConfigs:
           queue_limit_length 16
           overflow_action block
         </buffer>
-      </store>
+      </match>
+    </label>
 
-      # Output to S3 for backup/long-term storage
-      <store>
-        @type s3
-        @id out_s3
-        s3_bucket "#{ENV['FLUENT_S3_BUCKET']}"
-        s3_region "#{ENV['FLUENT_S3_REGION']}"
-        path logs/%Y/%m/%d/
-        <buffer time>
-          @type file
-          path /var/log/fluentd-buffers/s3.buffer
-          timekey 3600
-          timekey_wait 10m
-          timekey_use_utc true
-          chunk_limit_size 256m
-        </buffer>
-        <format>
-          @type json
-        </format>
-      </store>
-    </match>
-
-# Tolerations to run on all nodes
+# Tolerations - allow FluentD to run on master/control-plane nodes too
 tolerations:
   - key: node-role.kubernetes.io/master
     effect: NoSchedule
   - key: node-role.kubernetes.io/control-plane
     effect: NoSchedule
 
-# Node selector
+# Node placement - run on all nodes (DaemonSet default behavior)
 nodeSelector: {}
 
-# Update strategy
+# Update strategy - how to roll out updates
 updateStrategy:
   type: RollingUpdate
   rollingUpdate:
     maxUnavailable: 1
 
-# Pod priority
+# Pod priority - ensures FluentD is not evicted before application pods
 priorityClassName: system-node-critical

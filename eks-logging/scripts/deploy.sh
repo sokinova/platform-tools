@@ -79,11 +79,17 @@ echo ""
 
 # Step 5: Deploy Kibana
 # NOTE: Dev uses --no-hooks because ES security is disabled (HTTP not HTTPS)
+# The pre-install hook creates an ES token secret, so we create a dummy one manually
 # Staging/Prod have ES security enabled, so hooks work correctly
 echo "[5/7] Deploying Kibana..."
 HOOKS_FLAG=""
 if [[ "${ENVIRONMENT}" == "dev" ]]; then
   HOOKS_FLAG="--no-hooks"
+  echo "Creating dummy ES token secret (dev only - security disabled)..."
+  kubectl create secret generic kibana-${ENVIRONMENT}-kibana-es-token \
+    --from-literal=token="" \
+    --namespace ${NAMESPACE} \
+    --dry-run=client -o yaml | kubectl apply -f -
 fi
 helm upgrade --install kibana-${ENVIRONMENT} elastic/kibana \
   --namespace ${NAMESPACE} \

@@ -6,7 +6,7 @@
 replicas: 1
 
 # Elasticsearch connection - where Kibana fetches data from
-elasticsearchHosts: "http://elasticsearch-dev-master:9200"  # Internal cluster DNS
+elasticsearchHosts: "http://elasticsearch-master:9200"  # Internal cluster DNS
 
 # Protocol - HTTP for dev (ES security disabled), HTTPS for staging/prod
 protocol: http
@@ -28,7 +28,7 @@ kibanaConfig:
   kibana.yml: |
     server.name: kibana-dev                  # Instance name shown in UI
     server.host: "0.0.0.0"                   # Listen on all interfaces
-    elasticsearch.hosts: ["http://elasticsearch-dev-master:9200"]  # ES endpoint
+    elasticsearch.hosts: ["http://elasticsearch-master:9200"]  # ES endpoint
     monitoring.ui.container.elasticsearch.enabled: true  # Enable ES monitoring
 
 # Health check endpoint - Kibana ready when this returns 200

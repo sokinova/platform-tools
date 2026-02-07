@@ -87,7 +87,16 @@ jobs:
             --timeout=300s
 
       # NOTE: Dev uses --no-hooks because ES security is disabled (HTTP not HTTPS)
+      # The pre-install hook creates an ES token secret, so we create a dummy one manually
       # Staging/Prod have ES security enabled, so hooks work correctly
+      - name: Create dummy ES token for Kibana (dev only)
+        if: env.ENVIRONMENT_STAGE == 'dev'
+        run: |
+          kubectl create secret generic kibana-${ENVIRONMENT_STAGE}-kibana-es-token \
+            --from-literal=token="" \
+            --namespace logging \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Deploy Kibana
         run: |
           HOOKS_FLAG=""

@@ -8,6 +8,9 @@ metadata:
     kubernetes.io/ingress.class: nginx       # Use nginx ingress controller
     nginx.ingress.kubernetes.io/ssl-redirect: "false"  # No HTTPS redirect (dev only)
 
+    # External DNS - auto-creates Route53 DNS record pointing to this ingress LB
+    external-dns.alpha.kubernetes.io/hostname: kibana-ubuntu-dev.312ubuntu.com
+
     # IP Whitelist - Only these IPs can access Kibana (security layer 1)
     nginx.ingress.kubernetes.io/whitelist-source-range: "73.45.178.26/32"
 
