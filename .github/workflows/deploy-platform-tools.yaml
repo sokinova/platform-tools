@@ -128,6 +128,7 @@ jobs:
             --values /tmp/fluentd-values.yaml \
             --wait \
             --timeout 5m
+          rm -f /tmp/fluentd-values.yaml
 
       - name: Verify EFK deployment
         run: |
