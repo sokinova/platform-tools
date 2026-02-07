@@ -100,7 +100,7 @@ fileConfigs:
       <filter kubernetes.**>
         @type record_transformer
         <record>
-          cluster_name temporary-eks-cluster-staging
+          cluster_name temp-eks-cluster
           environment staging
         </record>
       </filter>
