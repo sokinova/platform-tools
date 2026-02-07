@@ -104,15 +104,23 @@ jobs:
       - name: Deploy Kibana
         run: |
           HOOKS_FLAG=""
+          KIBANA_VALUES="eks-logging/helm/kibana/values-${ENVIRONMENT_STAGE}.yaml"
           if [ "${ENVIRONMENT_STAGE}" == "dev" ]; then
             HOOKS_FLAG="--no-hooks"
+          else
+            # Staging/prod: substitute encryption key (generate if not in env)
+            KIBANA_ENCRYPTION_KEY=${KIBANA_ENCRYPTION_KEY:-$(openssl rand -hex 16)}
+            sed "s/\${KIBANA_ENCRYPTION_KEY}/${KIBANA_ENCRYPTION_KEY}/g" \
+              ${KIBANA_VALUES} > /tmp/kibana-values.yaml
+            KIBANA_VALUES="/tmp/kibana-values.yaml"
           fi
           helm upgrade --install kibana-${ENVIRONMENT_STAGE} elastic/kibana \
             --namespace logging \
-            --values eks-logging/helm/kibana/values-${ENVIRONMENT_STAGE}.yaml \
+            --values ${KIBANA_VALUES} \
             ${HOOKS_FLAG} \
             --wait \
             --timeout 5m
+          rm -f /tmp/kibana-values.yaml
 
       - name: Create Kibana auth secret
         run: |

@@ -7,6 +7,7 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: nginx       # Use nginx ingress controller
     nginx.ingress.kubernetes.io/ssl-redirect: "true"  # Redirect HTTP to HTTPS
+    cert-manager.io/cluster-issuer: letsencrypt-prod   # Auto-provision TLS cert (requires cert-manager)
 
     # External DNS - auto-creates Route53 DNS record pointing to this ingress LB
     external-dns.alpha.kubernetes.io/hostname: kibana-ubuntu-staging.312ubuntu.com
@@ -29,6 +30,10 @@ metadata:
     environment: staging
 spec:
   ingressClassName: nginx                    # Required for newer K8s versions
+  tls:
+    - hosts:
+        - kibana-ubuntu-staging.312ubuntu.com
+      secretName: kibana-staging-tls         # Auto-created by cert-manager
   rules:
     - host: kibana-ubuntu-staging.312ubuntu.com  # DNS must point to ingress LB
       http:

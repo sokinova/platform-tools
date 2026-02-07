@@ -98,12 +98,21 @@ if [[ "${ENVIRONMENT}" == "dev" ]]; then
     --namespace ${NAMESPACE} \
     --dry-run=client -o yaml | kubectl apply -f -
 fi
+# For staging/prod, substitute KIBANA_ENCRYPTION_KEY (generate if not set)
+KIBANA_VALUES="${ROOT_DIR}/helm/kibana/values-${ENVIRONMENT}.yaml"
+if [[ "${ENVIRONMENT}" != "dev" ]]; then
+  KIBANA_ENCRYPTION_KEY=${KIBANA_ENCRYPTION_KEY:-$(openssl rand -hex 16)}
+  sed "s/\${KIBANA_ENCRYPTION_KEY}/${KIBANA_ENCRYPTION_KEY}/g" \
+    ${KIBANA_VALUES} > /tmp/kibana-values-${ENVIRONMENT}.yaml
+  KIBANA_VALUES="/tmp/kibana-values-${ENVIRONMENT}.yaml"
+fi
 helm upgrade --install kibana-${ENVIRONMENT} elastic/kibana \
   --namespace ${NAMESPACE} \
-  --values ${ROOT_DIR}/helm/kibana/values-${ENVIRONMENT}.yaml \
+  --values ${KIBANA_VALUES} \
   ${HOOKS_FLAG} \
   --wait \
   --timeout 5m
+rm -f /tmp/kibana-values-${ENVIRONMENT}.yaml
 echo ""
 
 # Step 6: Create Kibana auth secret and apply ingress
