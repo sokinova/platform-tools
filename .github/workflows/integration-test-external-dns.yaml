@@ -56,8 +56,8 @@ jobs:
           TEST_NS: external-dns-test
         run: |
           kubectl get ns "$TEST_NS" >/dev/null 2>&1 || kubectl create ns "$TEST_NS"
-          kubectl apply -f external-dns/integration-tests/dns-test-deploy.yaml
-          kubectl apply -f external-dns/integration-tests/dns-test-ingress.yaml
+          kubectl apply -n "$TEST_NS" -f external-dns/integration-tests/dns-test-deploy.yaml 
+          kubectl apply -n "$TEST_NS" -f external-dns/integration-tests/dns-test-ingress.yaml
           kubectl rollout status deploy/dns-test -n "$TEST_NS" --timeout=180s
 
       - name: Wait for DNS record + verify nslookup + curl
@@ -88,5 +88,3 @@ jobs:
           kubectl delete -n "$TEST_NS" -f external-dns/integration-tests/dns-test-ingress.yaml --ignore-not-found=true
           kubectl delete -n "$TEST_NS" -f external-dns/integration-tests/dns-test-deploy.yaml --ignore-not-found=true
           kubectl delete ns "$TEST_NS" --ignore-not-found=true
-
-
