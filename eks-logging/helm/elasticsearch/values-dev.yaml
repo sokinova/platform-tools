@@ -6,6 +6,9 @@
 replicas: 1
 minimumMasterNodes: 1                        # Minimum nodes to form a cluster
 
+# Protocol - HTTP for dev (security disabled), HTTPS for staging/prod
+protocol: http
+
 # Resource limits - minimal for dev to save costs
 resources:
   requests:
@@ -32,7 +35,9 @@ clusterHealthCheckParams: "wait_for_status=yellow&timeout=1s"
 esConfig:
   elasticsearch.yml: |
     xpack.security.enabled: false            # No authentication required
-    xpack.security.enrollment.enabled: false # No node enrollment
+    xpack.security.enrollment.enabled: false  # No node enrollment
+    xpack.security.http.ssl.enabled: false   # Disable HTTPS (ES 8.x enables SSL separately)
+    xpack.security.transport.ssl.enabled: false  # Disable transport SSL
     cluster.name: "elasticsearch-dev"        # Cluster identifier
     network.host: 0.0.0.0                    # Listen on all interfaces
 
