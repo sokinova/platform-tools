@@ -11,10 +11,15 @@ ENVIRONMENT=${1:-dev}
 if [[ "${ENVIRONMENT}" != "dev" ]]; then
   echo "WARNING: This script is intended for dev environment only."
   echo "For staging/prod, IAM should be managed by MRP25BUBUN-6 (IAM automation)."
-  read -p "Continue anyway? (y/N): " confirm
-  if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
-    echo "Aborted."
-    exit 1
+  # Skip interactive prompt in CI (non-interactive shells)
+  if [[ -t 0 ]]; then
+    read -p "Continue anyway? (y/N): " confirm
+    if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
+      echo "Aborted."
+      exit 1
+    fi
+  else
+    echo "Running in non-interactive mode (CI), continuing..."
   fi
 fi
 
@@ -57,6 +62,11 @@ fi
 POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY_NAME}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Substitute environment-specific bucket name in the policy template
+S3_BUCKET="eks-logs-312ubuntu-${ENVIRONMENT}"
+POLICY_FILE=$(mktemp)
+sed "s/eks-logs-312ubuntu-dev/${S3_BUCKET}/g" ${SCRIPT_DIR}/fluentd-s3-policy.json > ${POLICY_FILE}
+
 if aws iam get-policy --policy-arn ${POLICY_ARN} 2>/dev/null; then
   echo "Policy ${POLICY_NAME} already exists, updating..."
   POLICY_VERSION=$(aws iam list-policy-versions --policy-arn ${POLICY_ARN} \
@@ -66,14 +76,15 @@ if aws iam get-policy --policy-arn ${POLICY_ARN} 2>/dev/null; then
   fi
   aws iam create-policy-version \
     --policy-arn ${POLICY_ARN} \
-    --policy-document file://${SCRIPT_DIR}/fluentd-s3-policy.json \
+    --policy-document file://${POLICY_FILE} \
     --set-as-default
 else
   echo "Creating policy ${POLICY_NAME}..."
   aws iam create-policy \
     --policy-name ${POLICY_NAME} \
-    --policy-document file://${SCRIPT_DIR}/fluentd-s3-policy.json
+    --policy-document file://${POLICY_FILE}
 fi
+rm -f ${POLICY_FILE}
 
 # Create trust policy document
 TRUST_POLICY=$(cat <<EOF

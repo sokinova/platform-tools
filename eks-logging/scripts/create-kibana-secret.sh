@@ -32,17 +32,27 @@ else
   USERNAME="admin"
   PASSWORD=$(openssl rand -base64 12)
 
-  echo ""
-  echo "Generated credentials:"
-  echo "  Username: ${USERNAME}"
-  echo "  Password: ${PASSWORD}"
-  echo ""
-  echo "To persist these credentials, create a SecretsManager secret:"
-  echo "  aws secretsmanager create-secret \\"
-  echo "    --name '${AWS_SECRET_NAME}' \\"
-  echo "    --secret-string '{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}' \\"
-  echo "    --region ${AWS_REGION}"
-  echo ""
+  # Store generated credentials in SecretsManager automatically
+  echo "Storing credentials in SecretsManager..."
+  aws secretsmanager create-secret \
+    --name "${AWS_SECRET_NAME}" \
+    --secret-string "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" \
+    --region ${AWS_REGION} 2>/dev/null || \
+  aws secretsmanager put-secret-value \
+    --secret-id "${AWS_SECRET_NAME}" \
+    --secret-string "{\"username\":\"${USERNAME}\",\"password\":\"${PASSWORD}\"}" \
+    --region ${AWS_REGION}
+
+  # Only print credentials interactively (not in CI logs)
+  if [[ -t 1 ]]; then
+    echo ""
+    echo "Generated credentials:"
+    echo "  Username: ${USERNAME}"
+    echo "  Password: ${PASSWORD}"
+    echo ""
+  else
+    echo "Credentials stored in SecretsManager: ${AWS_SECRET_NAME}"
+  fi
 fi
 
 # Check if htpasswd is available

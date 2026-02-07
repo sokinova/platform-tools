@@ -1,14 +1,15 @@
 # FluentD Helm values for prod environment
 # Chart: fluent/fluentd v0.5.2
-# Log collector that runs on every node and sends logs to Elasticsearch
+# Log collector that runs on every node and sends logs to Elasticsearch and S3
 
 # DaemonSet means one pod runs on every node automatically
 kind: DaemonSet
 
-# Container image with Elasticsearch plugin
+# Custom image with Elasticsearch + S3 plugins (built from eks-logging/docker/fluentd/Dockerfile)
+# The ${AWS_ACCOUNT_ID} placeholder is replaced at deploy time by the script
 image:
-  repository: fluent/fluentd-kubernetes-daemonset
-  tag: v1.16-debian-elasticsearch8-1
+  repository: ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/fluentd-es-s3
+  tag: v1.16-es8-s3
 
 # ServiceAccount with IRSA - allows FluentD to write to S3 without hardcoded credentials
 # The ${AWS_ACCOUNT_ID} placeholder is replaced at deploy time by the script
@@ -17,6 +18,11 @@ serviceAccount:
   name: fluentd-prod                         # ServiceAccount name
   annotations:
     eks.amazonaws.com/role-arn: "arn:aws:iam::${AWS_ACCOUNT_ID}:role/fluentd-s3-prod"  # IAM role for S3 access
+
+# Run as root - required to read /var/log hostPath and maintain pos_file
+securityContext:
+  runAsUser: 0
+  runAsGroup: 0
 
 # Resource configuration - production grade
 resources:
@@ -127,34 +133,65 @@ fileConfigs:
       </match>
     </label>
 
-  # OUTPUT: Send to Elasticsearch
-  # NOTE: S3 backup requires a custom image with fluent-plugin-s3
-  # The base elasticsearch8 image does not include the S3 plugin
+  # OUTPUT: Dual output - Elasticsearch (primary) + S3 (backup)
+  # Uses @type copy to send every log record to both destinations
   04_outputs.conf: |-
     <label @OUTPUT>
       <match **>
-        @type elasticsearch
-        host "elasticsearch-master"
-        port 9200
-        scheme http
-        ssl_verify false
-        verify_es_version_at_startup false
-        logstash_format true
-        logstash_prefix kubernetes
-        type_name _doc
-        include_tag_key true
-        <buffer>
-          @type file
-          path /var/log/fluentd-buffers/kubernetes.system.buffer
-          flush_mode interval
-          flush_interval 5s
-          retry_type exponential_backoff
-          retry_forever false
-          retry_max_interval 30
-          chunk_limit_size 2M
-          queue_limit_length 16
-          overflow_action block
-        </buffer>
+        @type copy
+
+        # Primary: Elasticsearch for real-time search/dashboards
+        <store>
+          @type elasticsearch
+          host "elasticsearch-master"
+          port 9200
+          scheme http
+          ssl_verify false
+          logstash_format true
+          logstash_prefix kubernetes
+          suppress_type_name true
+          include_tag_key true
+          <buffer>
+            @type file
+            path /tmp/fluentd-es-buffer
+            flush_mode interval
+            flush_interval 5s
+            retry_type exponential_backoff
+            retry_forever false
+            retry_max_interval 30
+            chunk_limit_size 2M
+            queue_limit_length 16
+            overflow_action block
+          </buffer>
+        </store>
+
+        # Backup: S3 for long-term retention and compliance
+        # Credentials provided via IRSA (ServiceAccount annotation above)
+        <store>
+          @type s3
+          s3_bucket eks-logs-312ubuntu-prod
+          s3_region us-east-1
+          path logs/
+          s3_object_key_format %{path}%{index}.%{file_extension}
+          store_as gzip
+          use_server_side_encryption AES256
+          <buffer>
+            @type file
+            path /tmp/fluentd-s3-buffer
+            flush_mode interval
+            flush_interval 60s
+            retry_type exponential_backoff
+            retry_forever false
+            retry_max_interval 30
+            chunk_limit_size 8m
+            queue_limit_length 16
+            overflow_action block
+          </buffer>
+          <format>
+            @type json
+          </format>
+        </store>
+
       </match>
     </label>
 

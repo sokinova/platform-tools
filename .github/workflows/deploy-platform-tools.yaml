@@ -86,12 +86,16 @@ jobs:
             -n logging \
             --timeout=300s
 
-      # NOTE: Dev uses --no-hooks because ES security is disabled (HTTP not HTTPS)
-      # The pre-install hook creates an ES token secret, so we create a dummy one manually
-      # Staging/Prod have ES security enabled, so hooks work correctly
-      - name: Create dummy ES token for Kibana (dev only)
+      # NOTE: Dev uses createCert: false in ES values, so the chart does not generate
+      # the elasticsearch-master-certs secret. Kibana chart unconditionally mounts it,
+      # so we create a dummy. Staging/Prod use createCert: true (default), no dummy needed.
+      - name: Create dummy secrets for Kibana (dev only)
         if: env.ENVIRONMENT_STAGE == 'dev'
         run: |
+          kubectl create secret generic elasticsearch-master-certs \
+            --from-literal=ca.crt="" \
+            --namespace logging \
+            --dry-run=client -o yaml | kubectl apply -f -
           kubectl create secret generic kibana-${ENVIRONMENT_STAGE}-kibana-es-token \
             --from-literal=token="" \
             --namespace logging \
@@ -118,6 +122,26 @@ jobs:
       - name: Apply Kibana Ingress
         run: kubectl apply -f eks-logging/manifests/kibana-ingress-${ENVIRONMENT_STAGE}.yaml
 
+      # Build custom FluentD image with ES + S3 plugins and push to ECR
+      # NOTE: The GHA IAM role needs ecr:* permissions for this step
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push FluentD custom image
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/fluentd-es-s3"
+
+          # Create ECR repo if it doesn't exist
+          aws ecr describe-repositories --repository-names fluentd-es-s3 2>/dev/null || \
+            aws ecr create-repository --repository-name fluentd-es-s3 \
+              --image-scanning-configuration scanOnPush=true
+
+          # Build and push
+          docker build -t ${ECR_REPO}:v1.16-es8-s3 \
+            -f eks-logging/docker/fluentd/Dockerfile .
+          docker push ${ECR_REPO}:v1.16-es8-s3
+
       - name: Deploy FluentD
         run: |
           AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -126,6 +150,7 @@ jobs:
           helm upgrade --install fluentd-${ENVIRONMENT_STAGE} fluent/fluentd \
             --namespace logging \
             --values /tmp/fluentd-values.yaml \
+            --set image.pullPolicy=Always \
             --wait \
             --timeout 5m
           rm -f /tmp/fluentd-values.yaml
@@ -141,6 +166,11 @@ jobs:
           echo ""
           echo "Checking Ingress status..."
           kubectl get ingress -n logging
+
+      - name: Run EFK integration tests
+        run: |
+          chmod +x eks-logging/scripts/test-logging.sh
+          ./eks-logging/scripts/test-logging.sh ${ENVIRONMENT_STAGE}
 
       # Repeat for each additional tool...
       # Example: Deploy External DNS

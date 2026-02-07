@@ -9,6 +9,10 @@ minimumMasterNodes: 1                        # Minimum nodes to form a cluster
 # Protocol - HTTP for dev (security disabled), HTTPS for staging/prod
 protocol: http
 
+# Disable auto-generated TLS certificates (ES 8.x default)
+# When true, the chart sets xpack.security.* env vars that override esConfig
+createCert: false
+
 # Resource limits - minimal for dev to save costs
 resources:
   requests:
@@ -31,12 +35,14 @@ persistence:
 clusterHealthCheckParams: "wait_for_status=yellow&timeout=1s"
 
 # Security - DISABLED for dev simplicity (uses HTTP not HTTPS)
-# For staging/prod: Remove this block to enable default security
+# For staging/prod: Remove this block and set createCert: true (default)
+# NOTE: createCert: false (above) prevents the chart from setting security
+# env vars. Without it, these esConfig values would be overridden.
 esConfig:
   elasticsearch.yml: |
     xpack.security.enabled: false            # No authentication required
     xpack.security.enrollment.enabled: false  # No node enrollment
-    xpack.security.http.ssl.enabled: false   # Disable HTTPS (ES 8.x enables SSL separately)
+    xpack.security.http.ssl.enabled: false   # Disable HTTPS on HTTP layer
     xpack.security.transport.ssl.enabled: false  # Disable transport SSL
     cluster.name: "elasticsearch-dev"        # Cluster identifier
     network.host: 0.0.0.0                    # Listen on all interfaces

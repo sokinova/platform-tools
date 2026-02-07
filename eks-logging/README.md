@@ -84,6 +84,9 @@ eks-logging/
 ├── iam/
 │   ├── fluentd-s3-policy.json        # S3 write policy (dev only)
 │   └── irsa-setup.sh                 # IRSA setup script (dev only)
+├── docker/
+│   └── fluentd/
+│       └── Dockerfile                # Custom FluentD image (ES + S3 plugins)
 └── scripts/
     ├── deploy.sh                      # Full deployment script
     ├── create-kibana-secret.sh       # Auth secret setup
@@ -179,11 +182,28 @@ helm upgrade --install kibana-dev elastic/kibana \
 kubectl apply -f eks-logging/manifests/kibana-ingress-dev.yaml
 ```
 
-### Step 6: Deploy FluentD
+### Step 6: Build Custom FluentD Image
+
+The base FluentD image does not include the S3 plugin. A custom Dockerfile adds
+`fluent-plugin-s3` via `bundle install` (the base image uses Bundler, so `fluent-gem install` is not visible at runtime).
+
+```bash
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com/fluentd-es-s3"
+
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com
+
+# Build and push
+docker build -t ${ECR_REPO}:v1.16-es8-s3 -f eks-logging/docker/fluentd/Dockerfile .
+docker push ${ECR_REPO}:v1.16-es8-s3
+```
+
+### Step 7: Deploy FluentD
 
 ```bash
 # Replace AWS_ACCOUNT_ID in values file
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 sed "s/\${AWS_ACCOUNT_ID}/${AWS_ACCOUNT_ID}/g" \
   eks-logging/helm/fluentd/values-dev.yaml > /tmp/fluentd-values.yaml
 
@@ -249,8 +269,8 @@ s3://eks-logs-312ubuntu-dev/logs/YYYY/MM/DD/
 | Environment | URL |
 |-------------|-----|
 | dev | https://kibana-ubuntu-dev.312ubuntu.com |
-| staging | https://kibana-staging.312ubuntu.com |
-| prod | https://kibana-prod.312ubuntu.com |
+| staging | https://kibana-ubuntu-staging.312ubuntu.com |
+| prod | https://kibana-ubuntu-prod.312ubuntu.com |
 
 ### Authentication
 
@@ -280,7 +300,7 @@ nginx.ingress.kubernetes.io/whitelist-source-range: "IP1/32,IP2/32"
 |---------|-----|---------|------|
 | ES Nodes | 1 | 2 | 3 |
 | ES Memory | 1Gi | 2Gi | 4Gi |
-| ES Storage | 10Gi | 50Gi | 100Gi |
+| ES Storage | emptyDir (none) | 50Gi | 100Gi |
 | Kibana Replicas | 1 | 1 | 2 |
 | FluentD Memory | 256Mi | 512Mi | 1Gi |
 
