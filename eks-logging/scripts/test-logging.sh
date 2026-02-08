@@ -130,12 +130,22 @@ echo "[8/8] Checking S3 bucket..."
 if aws s3 ls "s3://${S3_BUCKET}" --region ${AWS_REGION} >/dev/null 2>&1; then
   check_result 0 "S3 bucket '${S3_BUCKET}' accessible"
 
-  # Check for log files
-  LOG_COUNT=$(aws s3 ls "s3://${S3_BUCKET}/logs/" --recursive --region ${AWS_REGION} 2>/dev/null | wc -l)
+  # Check for log files (FluentD S3 buffer flushes every 60s, retry up to 90s)
+  LOG_COUNT=0
+  for i in 1 2 3; do
+    LOG_COUNT=$(aws s3 ls "s3://${S3_BUCKET}/logs/" --recursive --region ${AWS_REGION} 2>/dev/null | wc -l | tr -d ' ')
+    if [ "${LOG_COUNT}" -gt 0 ]; then
+      break
+    fi
+    if [ $i -lt 3 ]; then
+      echo "  Waiting for S3 flush (attempt $i/3, 30s)..."
+      sleep 30
+    fi
+  done
   if [ "${LOG_COUNT}" -gt 0 ]; then
     check_result 0 "Log files found in S3: ${LOG_COUNT}"
   else
-    check_result 1 "Log files in S3 (logs may not be flushed yet)"
+    check_result 1 "Log files in S3 (no files after 90s wait)"
   fi
 else
   check_result 1 "S3 bucket '${S3_BUCKET}' accessible"
