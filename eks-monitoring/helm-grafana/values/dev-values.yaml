@@ -38,4 +38,4 @@ secretsManager:
   enabled: true
   name: "grafana-admin-spc"
   secretName: "eks-monitoring/grafana-admin"
-  irsaRoleArn: arn:aws:iam::383585068161:role/eks-monitoring-grafana-irsa
+  irsaRoleArn: "arn:aws:iam::383585068161:role/eks-monitoring-grafana-irsa"
