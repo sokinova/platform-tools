@@ -10,11 +10,7 @@ grafana:
   enabled: true
   image: grafana/grafana:11.1.0
   replicas: 1
-
-  admin: 
-    user: admin
-    password: ChangeMe-Strong123!
-
+  serviceAccountName: grafana
   service:
     port: 3000
 
@@ -28,7 +24,6 @@ grafana:
     className: nginx
     host: grafana-ubuntu-dev.312ubuntu.com
     tlsSecretName: wildcard-312ubuntu-tls
-    whitelistSourceRange: "0.0.0.0/0"
 
 prometheus:
   enabled: true
@@ -38,3 +33,9 @@ prometheus:
   service:
     type: ClusterIP
     port: 9090
+
+secretsManager:
+  enabled: true
+  name: "grafana-admin-spc"
+  secretName: "eks-monitoring/grafana-admin"
+  irsaRoleArn: arn:aws:iam::383585068161:role/eks-monitoring-grafana-irsa

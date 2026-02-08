@@ -53,7 +53,11 @@ kubectl -n eks-monitoring-dev port-forward svc/eks-monitoring-prometheus 9090:90
 ```
 then open http://localhost:9090
 
-deployed Grafana
+ AWS Secret Manager 
+aws secretsmanager create-secret \
+  --name "eks-monitoring/grafana-admin" \
+  --secret-string '{"admin-user":"admin","admin-password":"ChangeMe-Strong123!"}'
+
 
 
 ## Resources

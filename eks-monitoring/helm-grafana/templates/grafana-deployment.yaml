@@ -14,28 +14,58 @@ spec:
       labels:
         app: grafana
     spec:
+      serviceAccountName: {{ default "grafana" .Values.grafana.serviceAccountName }}
       containers:
         - name: grafana
           image: {{ .Values.grafana.image }}
           ports:
             - containerPort: 3000
-          env:
-            - name: GF_SECURITY_ADMIN_USER
-              valueFrom:
-                secretKeyRef:
-                  name: grafana-admin
-                  key: admin-user
-            - name: GF_SECURITY_ADMIN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: grafana-admin
-                  key: admin-password
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              export GF_SECURITY_ADMIN_USER="$(cat /mnt/secrets-store/admin-user)"
+              export GF_SECURITY_ADMIN_PASSWORD="$(cat /mnt/secrets-store/admin-password)"
+              exec /run.sh
           volumeMounts:
             - name: datasources
               mountPath: /etc/grafana/provisioning/datasources
+            {{- if .Values.secretsManager.enabled }}
+            - name: secrets-store-inline
+              mountPath: /mnt/secrets-store
+              readOnly: true
+            {{- end }}
       volumes:
         - name: datasources
           configMap:
             name: grafana-datasources
-
+        {{- if .Values.secretsManager.enabled }}
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ .Values.secretsManager.name | quote }}
+        {{- end }}
 {{- end }}
+
+
+
+      #     # env:
+      #       - name: GF_SECURITY_ADMIN_USER
+      #         valueFrom:
+      #           secretKeyRef:
+      #             name: grafana-admin
+      #             key: admin-user
+      #       - name: GF_SECURITY_ADMIN_PASSWORD
+      #         valueFrom:
+      #           secretKeyRef:
+      #             name: grafana-admin
+      #             key: admin-password
+      #     volumeMounts:
+      #       - name: datasources
+      #         mountPath: /etc/grafana/provisioning/datasources
+      # volumes:
+      #   - name: datasources
+      #     configMap:
+      #       name: grafana-datasources
+      #         mountPath: /etc/grafana/provisioning/datasources         
