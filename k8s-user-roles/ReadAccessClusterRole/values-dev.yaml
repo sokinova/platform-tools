@@ -1,11 +1,31 @@
-environment: dev
+# values.yaml
 
-clusterRole:
-  name: read-access-role-dev
-  bindingName: read-access-binding-dev
-  group: developers
+# Environment info
+environment:
+  name: dev   # can be dev, staging, prod
 
-iamIdentityMapping:
-  arn: arn:aws:iam::123456789012:role/EKS-Dev
-  username: dev-user
-  group: developers
+# Cluster info
+cluster:
+  name: dev-cluster
+  region:
+    name: us-east-1
+
+# ClusterRole info
+ClusterRole:
+  name: read-access-role
+
+# ClusterRoleBinding info
+ClusterRBAC:
+  name: read-access-binding
+
+# Kubernetes Group info
+Group:
+  name: developers
+
+# IAM Role mapping for eksctl
+iamIdentityMappings:
+  - arn: arn:aws:iam::123456789012:role/EKS-Dev
+    username: dev-user
+    groups:
+      - developers
+
