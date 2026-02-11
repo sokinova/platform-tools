@@ -1,0 +1,11 @@
+environment: dev
+
+clusterRole:
+  name: read-access-role-dev
+  bindingName: read-access-binding-dev
+  group: developers
+
+iamIdentityMapping:
+  arn: arn:aws:iam::123456789012:role/EKS-Dev
+  username: dev-user
+  group: developers
