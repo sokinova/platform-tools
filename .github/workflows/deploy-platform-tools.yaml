@@ -63,6 +63,14 @@ jobs:
       # Repeat for each additional tool...
       # Example: Deploy External DNS
       # Setup K8s User Roles
+      # Create Cluster role and RBAC
+      - name: Deploy Cluster role and RBAC
+        run: |
+            helm upgrade --install read-access k8s-user-roles/ReadAccessClusterRole \
+            -f k8s-user-roles/ReadAccessClusterRole/values-${ENVIRONMENT_STAGE}.yaml \
+            --namespace helm-system \
+            --create-namespace  
+
       #Install AWS CLI
       - name: Ensure AWS CLI is installed
         run: |
@@ -82,21 +90,13 @@ jobs:
           aws eks create-access-entry \
             --cluster-name $CLUSTER_NAME \
             --principal-arn arn:aws:iam::383585068161:role/DeveloperProdAccessRole-ubuntu25b \
-            --type $ACCESS_TYPE
+            --type "STANDARD"
       
       # Verify Access Entry 
       - name: Verify Access Entry
         run: |
           aws eks list-access-entries \
             --cluster-name $CLUSTER_NAME
-
-      # Create Cluster role and RBAC
-      - name: Deploy Cluster role and RBAC
-        run: |
-            helm upgrade --install read-access k8s-user-roles/ReadAccessClusterRole \
-            -f k8s-user-roles/ReadAccessClusterRole/values-${ENVIRONMENT_STAGE}.yaml \
-            --namespace helm-system \
-            --create-namespace      
 
       - name: Finalize Deployment
         run: |
