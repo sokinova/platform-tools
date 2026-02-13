@@ -1,8 +1,0 @@
-# Namespace for all EFK logging components (Elasticsearch, FluentD, Kibana)
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: logging                              # All EFK pods, services, secrets live here
-  labels:
-    app.kubernetes.io/name: logging          # Standard K8s label for identification
-    app.kubernetes.io/component: efk-stack   # Indicates this is part of EFK stack

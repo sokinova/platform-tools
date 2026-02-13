@@ -89,12 +89,12 @@ echo ""
 
 # Test 5: Check Kibana Ingress
 echo "[5/8] Checking Kibana Ingress..."
-INGRESS=$(kubectl get ingress -n ${NAMESPACE} kibana-${ENVIRONMENT}-ingress -o jsonpath='{.spec.rules[0].host}' 2>/dev/null)
+INGRESS=$(kubectl get ingress -n ${NAMESPACE} efk-${ENVIRONMENT}-kibana-ingress -o jsonpath='{.spec.rules[0].host}' 2>/dev/null)
 if [ -n "${INGRESS}" ]; then
   check_result 0 "Kibana Ingress configured: ${INGRESS}"
 
   # Check if LB is provisioned
-  LB=$(kubectl get ingress -n ${NAMESPACE} kibana-${ENVIRONMENT}-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+  LB=$(kubectl get ingress -n ${NAMESPACE} efk-${ENVIRONMENT}-kibana-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
   if [ -n "${LB}" ]; then
     check_result 0 "Load balancer provisioned: ${LB}"
   else

@@ -1,0 +1,24 @@
+{{- if .Values.kibana.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "eks-logging.componentName" (dict "component" "kibana" "context" $) }}-config
+  namespace: {{ include "eks-logging.namespace" . }}
+  labels:
+    {{- include "eks-logging.kibanaLabels" (dict "context" $) | nindent 4 }}
+data:
+  kibana.yml: |
+    server.name: {{ .Values.kibana.serverName }}
+    server.host: "0.0.0.0"
+    elasticsearch.hosts:
+      - "http://{{ include "eks-logging.componentName" (dict "component" "elasticsearch" "context" $) }}:{{ .Values.elasticsearch.service.httpPort }}"
+
+    {{- if .Values.kibana.security.enabled }}
+    xpack.security.enabled: true
+    {{- if .Values.kibana.security.encryptionKey }}
+    xpack.encryptedSavedObjects.encryptionKey: {{ .Values.kibana.security.encryptionKey | quote }}
+    xpack.reporting.encryptionKey: {{ .Values.kibana.security.encryptionKey | quote }}
+    xpack.security.encryptionKey: {{ .Values.kibana.security.encryptionKey | quote }}
+    {{- end }}
+    {{- end }}
+{{- end }}

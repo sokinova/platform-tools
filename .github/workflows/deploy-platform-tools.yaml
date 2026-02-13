@@ -35,150 +35,52 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       # Login to EKS, make sure to switch to the permanent cluster created with terraform once it's up
-      # NOTE: Current dev cluster is "temp-eks-cluster" (no env suffix)
       - name: Login to EKS - update kubeconfig
-        run: aws eks update-kubeconfig --name temp-eks-cluster --region $AWS_REGION
-
-      # Install Helm
-      - name: Install Helm
-        uses: azure/setup-helm@v3
-        with:
-          version: 'v3.13.0'
+        run: aws eks update-kubeconfig --name projectx_cluster_ubuntu25b --region $AWS_REGION
 
       # Add deployment steps for each tool below
       - name: Deploy ingress-nginx controller
         run: kubectl apply -f ingress-nginx/deploy.yaml
 
+      # --- EFK Logging Stack ---
+      - name: Setup IRSA for FluentD
+        run: ./eks-logging/iam/irsa-setup.sh ${ENVIRONMENT_STAGE}
+
+      - name: Login to ECR and build FluentD image
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/fluentd-es-s3"
+          aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com" || true
+          aws ecr describe-repositories --repository-names fluentd-es-s3 --region ${AWS_REGION} 2>/dev/null || \
+            aws ecr create-repository --repository-name fluentd-es-s3 --image-scanning-configuration scanOnPush=true --region ${AWS_REGION}
+          docker build -t "${ECR_REPO}:v1.16-es8-s3" -f eks-logging/docker/fluentd/Dockerfile .
+          docker push "${ECR_REPO}:v1.16-es8-s3"
+
+      - name: Deploy EFK Stack
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          helm upgrade --install efk-${ENVIRONMENT_STAGE} ./eks-logging/chart \
+            --namespace logging --create-namespace \
+            --values ./eks-logging/chart/values/${ENVIRONMENT_STAGE}-values.yaml \
+            --set aws.accountId=${AWS_ACCOUNT_ID} \
+            --wait --timeout 15m
+
+      - name: Create Kibana auth secret
+        run: ./eks-logging/scripts/create-kibana-secret.sh ${ENVIRONMENT_STAGE}
+
+      - name: Verify EFK deployment
+        run: |
+          kubectl get pods -n logging
+          kubectl get svc -n logging
+          kubectl get ingress -n logging
+
+      - name: Run EFK integration tests
+        run: ./eks-logging/scripts/test-logging.sh ${ENVIRONMENT_STAGE}
+
       # Example for a tool like Karpenter
       - name: Deploy Karpenter
         run: |
             echo "Deploy Karpenter steps go here"
-
-      # EFK Logging Stack Deployment
-      - name: Create logging namespace
-        run: kubectl apply -f eks-logging/namespace.yaml
-
-      - name: Add Helm repositories
-        run: |
-          helm repo add elastic https://helm.elastic.co
-          helm repo add fluent https://fluent.github.io/helm-charts
-          helm repo update
-
-      # Temporary IRSA setup for dev testing - staging/prod should use IAM automation (MRP25BUBUN-6)
-      - name: Setup IRSA for FluentD (dev only)
-        if: env.ENVIRONMENT_STAGE == 'dev'
-        run: |
-          chmod +x eks-logging/iam/irsa-setup.sh
-          ./eks-logging/iam/irsa-setup.sh ${ENVIRONMENT_STAGE}
-
-      - name: Deploy Elasticsearch
-        run: |
-          helm upgrade --install elasticsearch-${ENVIRONMENT_STAGE} elastic/elasticsearch \
-            --namespace logging \
-            --values eks-logging/helm/elasticsearch/values-${ENVIRONMENT_STAGE}.yaml \
-            --wait \
-            --timeout 10m
-
-      - name: Wait for Elasticsearch
-        run: |
-          kubectl wait --for=condition=ready pod \
-            -l app=elasticsearch-master \
-            -n logging \
-            --timeout=300s
-
-      # NOTE: Dev uses createCert: false in ES values, so the chart does not generate
-      # the elasticsearch-master-certs secret. Kibana chart unconditionally mounts it,
-      # so we create a dummy. Staging/Prod use createCert: true (default), no dummy needed.
-      - name: Create dummy secrets for Kibana (dev only)
-        if: env.ENVIRONMENT_STAGE == 'dev'
-        run: |
-          kubectl create secret generic elasticsearch-master-certs \
-            --from-literal=ca.crt="" \
-            --namespace logging \
-            --dry-run=client -o yaml | kubectl apply -f -
-          kubectl create secret generic kibana-${ENVIRONMENT_STAGE}-kibana-es-token \
-            --from-literal=token="" \
-            --namespace logging \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Deploy Kibana
-        run: |
-          HOOKS_FLAG=""
-          KIBANA_VALUES="eks-logging/helm/kibana/values-${ENVIRONMENT_STAGE}.yaml"
-          if [ "${ENVIRONMENT_STAGE}" == "dev" ]; then
-            HOOKS_FLAG="--no-hooks"
-          else
-            # Staging/prod: substitute encryption key (generate if not in env)
-            KIBANA_ENCRYPTION_KEY=${KIBANA_ENCRYPTION_KEY:-$(openssl rand -hex 16)}
-            sed "s/\${KIBANA_ENCRYPTION_KEY}/${KIBANA_ENCRYPTION_KEY}/g" \
-              ${KIBANA_VALUES} > /tmp/kibana-values.yaml
-            KIBANA_VALUES="/tmp/kibana-values.yaml"
-          fi
-          helm upgrade --install kibana-${ENVIRONMENT_STAGE} elastic/kibana \
-            --namespace logging \
-            --values ${KIBANA_VALUES} \
-            ${HOOKS_FLAG} \
-            --wait \
-            --timeout 5m
-          rm -f /tmp/kibana-values.yaml
-
-      - name: Create Kibana auth secret
-        run: |
-          chmod +x eks-logging/scripts/create-kibana-secret.sh
-          ./eks-logging/scripts/create-kibana-secret.sh ${ENVIRONMENT_STAGE}
-
-      - name: Apply Kibana Ingress
-        run: kubectl apply -f eks-logging/manifests/kibana-ingress-${ENVIRONMENT_STAGE}.yaml
-
-      # Build custom FluentD image with ES + S3 plugins and push to ECR
-      # NOTE: The GHA IAM role needs ecr:* permissions for this step
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push FluentD custom image
-        run: |
-          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/fluentd-es-s3"
-
-          # Create ECR repo if it doesn't exist
-          aws ecr describe-repositories --repository-names fluentd-es-s3 2>/dev/null || \
-            aws ecr create-repository --repository-name fluentd-es-s3 \
-              --image-scanning-configuration scanOnPush=true
-
-          # Build and push
-          docker build -t ${ECR_REPO}:v1.16-es8-s3 \
-            -f eks-logging/docker/fluentd/Dockerfile .
-          docker push ${ECR_REPO}:v1.16-es8-s3
-
-      - name: Deploy FluentD
-        run: |
-          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          sed "s/\${AWS_ACCOUNT_ID}/${AWS_ACCOUNT_ID}/g" \
-            eks-logging/helm/fluentd/values-${ENVIRONMENT_STAGE}.yaml > /tmp/fluentd-values.yaml
-          helm upgrade --install fluentd-${ENVIRONMENT_STAGE} fluent/fluentd \
-            --namespace logging \
-            --values /tmp/fluentd-values.yaml \
-            --set image.pullPolicy=Always \
-            --wait \
-            --timeout 5m
-          rm -f /tmp/fluentd-values.yaml
-
-      - name: Verify EFK deployment
-        run: |
-          echo "Checking EFK stack status..."
-          kubectl get pods -n logging
-          echo ""
-          echo "Checking Elasticsearch cluster health..."
-          ES_POD=$(kubectl get pods -n logging -l app=elasticsearch-master -o jsonpath='{.items[0].metadata.name}')
-          kubectl exec -n logging ${ES_POD} -- curl -s http://localhost:9200/_cluster/health | jq
-          echo ""
-          echo "Checking Ingress status..."
-          kubectl get ingress -n logging
-
-      - name: Run EFK integration tests
-        run: |
-          chmod +x eks-logging/scripts/test-logging.sh
-          ./eks-logging/scripts/test-logging.sh ${ENVIRONMENT_STAGE}
 
       # Repeat for each additional tool...
       # Example: Deploy External DNS

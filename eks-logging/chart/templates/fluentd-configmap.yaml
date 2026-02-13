@@ -1,0 +1,165 @@
+{{- if .Values.fluentd.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "eks-logging.componentName" (dict "component" "fluentd" "context" $) }}-config
+  namespace: {{ include "eks-logging.namespace" . }}
+  labels:
+    {{- include "eks-logging.fluentdLabels" (dict "context" $) | nindent 4 }}
+data:
+  fluent.conf: |
+    # 01 — Sources: Tail container logs and expose Prometheus metrics
+    <source>
+      @type tail
+      @id in_tail_container_logs
+      @label @KUBERNETES
+      path /var/log/containers/*.log
+      pos_file /var/log/fluentd-containers.log.pos
+      tag kubernetes.*
+      read_from_head true
+      <parse>
+        @type multi_format
+        <pattern>
+          format json
+          time_key time
+          time_type string
+          time_format "%Y-%m-%dT%H:%M:%S.%NZ"
+          keep_time_key false
+        </pattern>
+        <pattern>
+          format regexp
+          expression /^(?<time>.+) (?<stream>stdout|stderr)( (.))? (?<log>.*)$/
+          time_format '%Y-%m-%dT%H:%M:%S.%NZ'
+          keep_time_key false
+        </pattern>
+      </parse>
+      emit_unmatched_lines true
+    </source>
+
+    # 02 — Filters: Enrich logs with K8s metadata and custom fields
+    <label @KUBERNETES>
+      <match kubernetes.var.log.containers.fluentd**>
+        @type relabel
+        @label @FLUENT_LOG
+      </match>
+
+      <filter kubernetes.**>
+        @type kubernetes_metadata
+        @id filter_kube_metadata
+        skip_labels false
+        skip_container_metadata false
+        skip_namespace_metadata true
+        skip_master_url true
+      </filter>
+
+      <filter kubernetes.**>
+        @type record_transformer
+        <record>
+          cluster_name {{ .Values.fluentd.clusterName }}
+          environment {{ .Values.global.environment }}
+        </record>
+      </filter>
+
+      <match **>
+        @type relabel
+        @label @DISPATCH
+      </match>
+    </label>
+
+    # FluentD's own logs — discard to avoid feedback loop
+    <label @FLUENT_LOG>
+      <match **>
+        @type null
+      </match>
+    </label>
+
+    # 03 — Dispatch: Prometheus metrics then forward to output
+    <label @DISPATCH>
+      <filter **>
+        @type prometheus
+        <metric>
+          name fluentd_input_status_num_records_total
+          type counter
+          desc The total number of incoming records
+          <labels>
+            tag ${tag}
+            hostname ${hostname}
+          </labels>
+        </metric>
+      </filter>
+
+      <match **>
+        @type relabel
+        @label @OUTPUT
+      </match>
+    </label>
+
+    # 04 — Outputs: Dual output — Elasticsearch (primary) + S3 (backup)
+    <label @OUTPUT>
+      <match **>
+        @type copy
+
+        # Primary: Elasticsearch for real-time search/dashboards
+        <store>
+          @type elasticsearch
+          @id out_es
+          {{- $esHost := .Values.fluentd.output.elasticsearch.host }}
+          {{- if not $esHost }}
+          {{- $esHost = printf "%s-elasticsearch" .Release.Name }}
+          {{- end }}
+          host {{ $esHost }}
+          port {{ .Values.fluentd.output.elasticsearch.port }}
+          scheme {{ .Values.fluentd.output.elasticsearch.scheme }}
+          ssl_verify false
+          logstash_format true
+          logstash_prefix kubernetes
+          suppress_type_name true
+          include_tag_key true
+          <buffer>
+            @type {{ .Values.fluentd.output.elasticsearch.buffer.type }}
+            path {{ .Values.fluentd.output.elasticsearch.buffer.path }}
+            flush_mode interval
+            flush_interval {{ .Values.fluentd.output.elasticsearch.buffer.flushInterval }}
+            retry_type exponential_backoff
+            retry_forever false
+            retry_max_interval {{ .Values.fluentd.output.elasticsearch.buffer.retryMaxInterval }}
+            chunk_limit_size {{ .Values.fluentd.output.elasticsearch.buffer.chunkLimitSize }}
+            queue_limit_length 8
+            overflow_action block
+          </buffer>
+        </store>
+
+        # Backup: S3 for long-term retention
+        {{- if .Values.fluentd.output.s3.bucket }}
+        <store>
+          @type s3
+          @id out_s3
+          s3_bucket {{ .Values.fluentd.output.s3.bucket }}
+          s3_region {{ .Values.fluentd.output.s3.region }}
+          path {{ .Values.fluentd.output.s3.path }}
+          s3_object_key_format %{path}%{index}.%{file_extension}
+          store_as gzip
+          {{- if .Values.fluentd.output.s3.encryption }}
+          use_server_side_encryption {{ .Values.fluentd.output.s3.encryption }}
+          {{- end }}
+          <buffer>
+            @type {{ .Values.fluentd.output.s3.buffer.type }}
+            path {{ .Values.fluentd.output.s3.buffer.path }}
+            flush_mode interval
+            flush_interval 60s
+            retry_type exponential_backoff
+            retry_forever false
+            retry_max_interval 30
+            chunk_limit_size {{ .Values.fluentd.output.s3.buffer.chunkLimitSize }}
+            queue_limit_length 8
+            overflow_action block
+          </buffer>
+          <format>
+            @type json
+          </format>
+        </store>
+        {{- end }}
+
+      </match>
+    </label>
+{{- end }}

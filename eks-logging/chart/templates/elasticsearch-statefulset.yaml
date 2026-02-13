@@ -1,0 +1,122 @@
+{{- if .Values.elasticsearch.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "eks-logging.componentName" (dict "component" "elasticsearch" "context" $) }}
+  namespace: {{ include "eks-logging.namespace" . }}
+  labels:
+    {{- include "eks-logging.elasticsearchLabels" (dict "context" $) | nindent 4 }}
+spec:
+  serviceName: {{ include "eks-logging.componentName" (dict "component" "elasticsearch-headless" "context" $) }}
+  replicas: {{ .Values.elasticsearch.replicas }}
+  selector:
+    matchLabels:
+      {{- include "eks-logging.selectorLabels" (dict "component" "elasticsearch" "context" $) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "eks-logging.elasticsearchLabels" (dict "context" $) | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/elasticsearch-configmap.yaml") . | sha256sum }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.elasticsearch.terminationGracePeriodSeconds }}
+      {{- if .Values.elasticsearch.sysctlInit.enabled }}
+      initContainers:
+        - name: sysctl
+          image: busybox:1.36
+          command: ["sysctl", "-w", "vm.max_map_count=262144"]
+          securityContext:
+            privileged: true
+            runAsUser: 0
+      {{- end }}
+      containers:
+        - name: elasticsearch
+          image: "{{ .Values.elasticsearch.image.repository }}:{{ .Values.elasticsearch.image.tag }}"
+          imagePullPolicy: {{ .Values.elasticsearch.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.elasticsearch.service.httpPort }}
+              protocol: TCP
+            - name: transport
+              containerPort: {{ .Values.elasticsearch.service.transportPort }}
+              protocol: TCP
+          env:
+            - name: node.name
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: ES_JAVA_OPTS
+              value: {{ .Values.elasticsearch.javaOpts | quote }}
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+              subPath: elasticsearch.yml
+            - name: data
+              mountPath: /usr/share/elasticsearch/data
+          resources:
+            {{- toYaml .Values.elasticsearch.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health?local=true
+              port: http
+            initialDelaySeconds: {{ .Values.elasticsearch.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.elasticsearch.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.elasticsearch.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.elasticsearch.probes.readiness.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /_cluster/health?local=true
+              port: http
+            initialDelaySeconds: {{ .Values.elasticsearch.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.elasticsearch.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.elasticsearch.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.elasticsearch.probes.liveness.failureThreshold }}
+          startupProbe:
+            httpGet:
+              path: /_cluster/health?local=true
+              port: http
+            initialDelaySeconds: {{ .Values.elasticsearch.probes.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.elasticsearch.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.elasticsearch.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.elasticsearch.probes.startup.failureThreshold }}
+      {{- if or (eq .Values.elasticsearch.antiAffinity "soft") (eq .Values.elasticsearch.antiAffinity "hard") }}
+      affinity:
+        podAntiAffinity:
+          {{- if eq .Values.elasticsearch.antiAffinity "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  {{- include "eks-logging.selectorLabels" (dict "component" "elasticsearch" "context" $) | nindent 18 }}
+              topologyKey: kubernetes.io/hostname
+          {{- else }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "eks-logging.selectorLabels" (dict "component" "elasticsearch" "context" $) | nindent 20 }}
+                topologyKey: kubernetes.io/hostname
+          {{- end }}
+      {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "eks-logging.componentName" (dict "component" "elasticsearch" "context" $) }}-config
+        {{- if not .Values.elasticsearch.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if .Values.elasticsearch.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.elasticsearch.persistence.storageClass }}
+        storageClassName: {{ .Values.elasticsearch.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.elasticsearch.persistence.size }}
+  {{- end }}
+{{- end }}

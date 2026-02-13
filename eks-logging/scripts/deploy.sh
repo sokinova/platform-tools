@@ -1,6 +1,6 @@
 #!/bin/bash
 # EFK Stack Deployment Script
-# Deploys Elasticsearch, Kibana, and FluentD to an EKS cluster
+# Deploys Elasticsearch, Kibana, and FluentD to an EKS cluster using custom Helm chart
 
 set -e
 
@@ -10,6 +10,8 @@ AWS_REGION=${AWS_REGION:-us-east-1}
 NAMESPACE="logging"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "${SCRIPT_DIR}")"
+CHART_DIR="${ROOT_DIR}/chart"
+VALUES_FILE="${CHART_DIR}/values/${ENVIRONMENT}-values.yaml"
 
 echo "=========================================="
 echo "EFK Stack Deployment - ${ENVIRONMENT}"
@@ -22,12 +24,17 @@ if [[ ! "${ENVIRONMENT}" =~ ^(dev|staging|prod)$ ]]; then
   exit 1
 fi
 
+# Validate values file exists
+if [[ ! -f "${VALUES_FILE}" ]]; then
+  echo "Error: Values file not found: ${VALUES_FILE}"
+  exit 1
+fi
+
 # Check prerequisites
 echo "Checking prerequisites..."
 command -v kubectl >/dev/null 2>&1 || { echo "kubectl is required but not installed."; exit 1; }
 command -v helm >/dev/null 2>&1 || { echo "helm is required but not installed."; exit 1; }
 command -v aws >/dev/null 2>&1 || { echo "aws CLI is required but not installed."; exit 1; }
-command -v docker >/dev/null 2>&1 || { echo "docker is required but not installed (needed for FluentD custom image)."; exit 1; }
 
 # Verify cluster connection
 echo "Verifying cluster connection..."
@@ -38,92 +45,24 @@ fi
 echo "Connected to cluster: $(kubectl config current-context)"
 echo ""
 
-# Step 1: Create namespace
-echo "[1/8] Creating namespace..."
-kubectl apply -f ${ROOT_DIR}/namespace.yaml
+# Get AWS Account ID
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+echo "AWS Account: ${AWS_ACCOUNT_ID}"
 echo ""
 
-# Step 2: Add Helm repositories
-echo "[2/8] Adding Helm repositories..."
-helm repo add elastic https://helm.elastic.co 2>/dev/null || true
-helm repo add fluent https://fluent.github.io/helm-charts 2>/dev/null || true
-helm repo update
-echo ""
-
-# Step 3: Setup IRSA for FluentD (dev only)
+# Step 1: Setup IRSA for FluentD (dev only)
 # For staging/prod, IAM automation (MRP25BUBUN-6) should handle this
 if [[ "${ENVIRONMENT}" == "dev" ]]; then
-  echo "[3/8] Setting up IRSA for FluentD (dev only)..."
+  echo "[1/5] Setting up IRSA for FluentD (dev only)..."
   ${ROOT_DIR}/iam/irsa-setup.sh ${ENVIRONMENT}
   echo ""
 else
-  echo "[3/8] Skipping IRSA setup (staging/prod uses IAM automation)..."
+  echo "[1/5] Skipping IRSA setup (staging/prod uses IAM automation)..."
   echo ""
 fi
 
-# Step 4: Deploy Elasticsearch
-echo "[4/8] Deploying Elasticsearch..."
-helm upgrade --install elasticsearch-${ENVIRONMENT} elastic/elasticsearch \
-  --namespace ${NAMESPACE} \
-  --values ${ROOT_DIR}/helm/elasticsearch/values-${ENVIRONMENT}.yaml \
-  --wait \
-  --timeout 10m
-echo ""
-
-# Wait for Elasticsearch to be ready
-echo "Waiting for Elasticsearch to be ready..."
-kubectl wait --for=condition=ready pod \
-  -l app=elasticsearch-master \
-  -n ${NAMESPACE} \
-  --timeout=300s
-echo ""
-
-# Step 5: Deploy Kibana
-# NOTE: Dev uses --no-hooks because ES security is disabled (HTTP not HTTPS)
-# The pre-install hook creates an ES token secret, so we create a dummy one manually
-# Staging/Prod have ES security enabled, so hooks work correctly
-echo "[5/8] Deploying Kibana..."
-HOOKS_FLAG=""
-if [[ "${ENVIRONMENT}" == "dev" ]]; then
-  HOOKS_FLAG="--no-hooks"
-  echo "Creating dummy secrets (dev only - ES security disabled)..."
-  # Kibana chart unconditionally mounts elasticsearch-master-certs;
-  # with createCert: false on ES, the chart doesn't generate it
-  kubectl create secret generic elasticsearch-master-certs \
-    --from-literal=ca.crt="" \
-    --namespace ${NAMESPACE} \
-    --dry-run=client -o yaml | kubectl apply -f -
-  kubectl create secret generic kibana-${ENVIRONMENT}-kibana-es-token \
-    --from-literal=token="" \
-    --namespace ${NAMESPACE} \
-    --dry-run=client -o yaml | kubectl apply -f -
-fi
-# For staging/prod, substitute KIBANA_ENCRYPTION_KEY (generate if not set)
-KIBANA_VALUES="${ROOT_DIR}/helm/kibana/values-${ENVIRONMENT}.yaml"
-if [[ "${ENVIRONMENT}" != "dev" ]]; then
-  KIBANA_ENCRYPTION_KEY=${KIBANA_ENCRYPTION_KEY:-$(openssl rand -hex 16)}
-  sed "s/\${KIBANA_ENCRYPTION_KEY}/${KIBANA_ENCRYPTION_KEY}/g" \
-    ${KIBANA_VALUES} > /tmp/kibana-values-${ENVIRONMENT}.yaml
-  KIBANA_VALUES="/tmp/kibana-values-${ENVIRONMENT}.yaml"
-fi
-helm upgrade --install kibana-${ENVIRONMENT} elastic/kibana \
-  --namespace ${NAMESPACE} \
-  --values ${KIBANA_VALUES} \
-  ${HOOKS_FLAG} \
-  --wait \
-  --timeout 5m
-rm -f /tmp/kibana-values-${ENVIRONMENT}.yaml
-echo ""
-
-# Step 6: Create Kibana auth secret and apply ingress
-echo "[6/8] Setting up Kibana authentication and ingress..."
-${SCRIPT_DIR}/create-kibana-secret.sh ${ENVIRONMENT}
-kubectl apply -f ${ROOT_DIR}/manifests/kibana-ingress-${ENVIRONMENT}.yaml
-echo ""
-
-# Step 7: Build and push custom FluentD image (ES + S3 plugins)
-echo "[7/8] Building custom FluentD image..."
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+# Step 2: Build and push custom FluentD image
+echo "[2/5] Building custom FluentD image..."
 ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/fluentd-es-s3"
 
 # Login to ECR
@@ -141,21 +80,31 @@ docker build -t ${ECR_REPO}:v1.16-es8-s3 \
 docker push ${ECR_REPO}:v1.16-es8-s3
 echo ""
 
-# Step 8: Deploy FluentD
-echo "[8/8] Deploying FluentD..."
+# Step 3: Deploy EFK chart
+echo "[3/5] Deploying EFK Helm chart..."
+HELM_SET_ARGS="--set aws.accountId=${AWS_ACCOUNT_ID}"
 
-# Create values file with substituted account ID
-sed "s/\${AWS_ACCOUNT_ID}/${AWS_ACCOUNT_ID}/g" \
-  ${ROOT_DIR}/helm/fluentd/values-${ENVIRONMENT}.yaml > /tmp/fluentd-values-${ENVIRONMENT}.yaml
+# Generate encryption key for non-dev environments
+if [[ "${ENVIRONMENT}" != "dev" ]]; then
+  KIBANA_ENCRYPTION_KEY="${KIBANA_ENCRYPTION_KEY:-$(openssl rand -hex 16)}"
+  HELM_SET_ARGS="${HELM_SET_ARGS} --set kibana.security.encryptionKey=${KIBANA_ENCRYPTION_KEY}"
+fi
 
-helm upgrade --install fluentd-${ENVIRONMENT} fluent/fluentd \
-  --namespace ${NAMESPACE} \
-  --values /tmp/fluentd-values-${ENVIRONMENT}.yaml \
-  --set image.pullPolicy=Always \
-  --wait \
-  --timeout 5m
+helm upgrade --install efk-${ENVIRONMENT} ${CHART_DIR} \
+  --namespace ${NAMESPACE} --create-namespace \
+  --values ${VALUES_FILE} \
+  ${HELM_SET_ARGS} \
+  --wait --timeout 15m
+echo ""
 
-rm -f /tmp/fluentd-values-${ENVIRONMENT}.yaml
+# Step 4: Create Kibana auth secret
+echo "[4/5] Setting up Kibana authentication..."
+${SCRIPT_DIR}/create-kibana-secret.sh ${ENVIRONMENT}
+echo ""
+
+# Step 5: Verify
+echo "[5/5] Verifying deployment..."
+kubectl get pods -n ${NAMESPACE}
 echo ""
 
 # Summary
@@ -164,14 +113,11 @@ echo "EFK Stack Deployment Complete!"
 echo "=========================================="
 echo ""
 echo "Components deployed:"
-echo "  - Elasticsearch: elasticsearch-${ENVIRONMENT}-master"
-echo "  - Kibana: kibana-${ENVIRONMENT}-kibana"
-echo "  - FluentD: fluentd-${ENVIRONMENT}"
+echo "  - Elasticsearch: efk-${ENVIRONMENT}-elasticsearch"
+echo "  - Kibana: efk-${ENVIRONMENT}-kibana"
+echo "  - FluentD: efk-${ENVIRONMENT}-fluentd"
 echo ""
-echo "Kibana URL: http://kibana-ubuntu-dev.312ubuntu.com (once DNS is configured)"
-echo ""
-echo "Verify deployment:"
-echo "  kubectl get pods -n ${NAMESPACE}"
+echo "Kibana URL: http://kibana-ubuntu-${ENVIRONMENT}.312ubuntu.com (once DNS is configured)"
 echo ""
 echo "Run tests:"
 echo "  ${SCRIPT_DIR}/test-logging.sh ${ENVIRONMENT}"

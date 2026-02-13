@@ -1,0 +1,42 @@
+# Dev environment values — single replicas, no persistence, security off
+
+global:
+  environment: dev
+
+elasticsearch:
+  replicas: 1
+  javaOpts: "-Xmx512m -Xms512m"
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  antiAffinity: ""
+  pdb:
+    enabled: false
+  security:
+    enabled: false
+
+kibana:
+  replicas: 1
+  security:
+    enabled: false
+  ingress:
+    enabled: true
+    host: kibana-ubuntu-dev.312ubuntu.com
+    tls:
+      enabled: false
+    sslRedirect: "false"
+    whitelistSourceRange: "73.45.178.26/32"
+
+fluentd:
+  serviceAccount:
+    name: fluentd-dev
+  output:
+    s3:
+      bucket: eks-logs-312ubuntu-dev
+  clusterName: projectx_cluster_ubuntu25b
