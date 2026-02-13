@@ -47,25 +47,4 @@ spec:
               secretProviderClass: {{ .Values.secretsManager.name | quote }}
         {{- end }}
 {{- end }}
-
-
-
-      #     # env:
-      #       - name: GF_SECURITY_ADMIN_USER
-      #         valueFrom:
-      #           secretKeyRef:
-      #             name: grafana-admin
-      #             key: admin-user
-      #       - name: GF_SECURITY_ADMIN_PASSWORD
-      #         valueFrom:
-      #           secretKeyRef:
-      #             name: grafana-admin
-      #             key: admin-password
-      #     volumeMounts:
-      #       - name: datasources
-      #         mountPath: /etc/grafana/provisioning/datasources
-      # volumes:
-      #   - name: datasources
-      #     configMap:
-      #       name: grafana-datasources
-      #         mountPath: /etc/grafana/provisioning/datasources         
+       
