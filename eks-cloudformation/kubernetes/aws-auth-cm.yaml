@@ -16,7 +16,4 @@ data:
       username: devops-users
       groups:
         - system:masters
-    - rolearn: arn:aws:iam::383585068161:role/DeveloperProdAccessRole-ubuntu25b
-      username: developer
-      groups:
-        - dev-team  
+    
