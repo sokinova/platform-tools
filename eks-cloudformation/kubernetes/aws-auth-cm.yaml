@@ -19,4 +19,4 @@ data:
     - rolearn: arn:aws:iam::383585068161:role/DeveloperProdAccessRole-ubuntu25b
       username: developer
       groups:
-        - developers
+        - dev-team  
