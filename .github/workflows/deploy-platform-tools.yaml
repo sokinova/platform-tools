@@ -44,7 +44,7 @@ jobs:
 
       # Login to EKS, make sure to switch to the permanent cluster created with terraform once it's up
       - name: Login to EKS - update kubeconfig
-        run: aws eks update-kubeconfig --name ${CLUSTER_NAME} --region $AWS_REGION
+        run: aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
 
       # Add deployment steps for each tool below
       - name: Deploy ingress-nginx controller
@@ -80,7 +80,7 @@ jobs:
       - name: Create EKS Access Entry
         run: |
           aws eks create-access-entry \
-            --cluster-name ${CLUSTER_NAME} \
+            --cluster-name $CLUSTER_NAME \
             --principal-arn arn:aws:iam::383585068161:role/DeveloperProdAccessRole-ubuntu25b \
             --type $ACCESS_TYPE
       
