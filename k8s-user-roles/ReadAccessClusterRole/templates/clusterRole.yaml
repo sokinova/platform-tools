@@ -13,11 +13,11 @@ rules:
     - endpoints
     - persistentvolumeclaims
     - events
-  verbs: ["get", "watch", "list"]
+  verbs: ["get", "watch", "list", "describe"]
 
 - apiGroups: ["apps"]
   resources:
     - deployments
     - replicasets
     - statefulsets
-  verbs: ["get", "watch", "list"]
+  verbs: ["get", "watch", "list", "describe"]

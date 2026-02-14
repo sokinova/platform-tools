@@ -15,7 +15,7 @@ permissions:
 env:
   AWS_REGION: "us-east-1"
   ENVIRONMENT_STAGE: "dev"
-  CLUSTER_NAME: "temp-eks-cluster"
+  CLUSTER_NAME: "rain-eks-cluster"
 
 
 jobs:
@@ -90,7 +90,9 @@ jobs:
           aws eks create-access-entry \
             --cluster-name $CLUSTER_NAME \
             --principal-arn arn:aws:iam::383585068161:role/DeveloperProdAccessRole-ubuntu25b \
-            --type "STANDARD"
+            --type STANDARD \
+            --kubernetes-groups dev-team \
+            --username DeveloperProdAccessRole
       
       # Verify Access Entry 
       - name: Verify Access Entry
