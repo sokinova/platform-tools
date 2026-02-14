@@ -61,7 +61,7 @@ jobs:
         run: |
           if helm status efk-${ENVIRONMENT_STAGE} -n logging >/dev/null 2>&1; then
             echo "Found old unified release efk-${ENVIRONMENT_STAGE}, uninstalling..."
-            helm uninstall efk-${ENVIRONMENT_STAGE} -n logging --wait
+            helm uninstall efk-${ENVIRONMENT_STAGE} -n logging --no-hooks || true
           else
             echo "No old unified release found, skipping cleanup."
           fi
