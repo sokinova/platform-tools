@@ -15,7 +15,7 @@ permissions:
 env:
   AWS_REGION: "us-east-1"
   ENVIRONMENT_STAGE: "dev"
-  CLUSTER_NAME: "rain-eks-cluster"
+  CLUSTER_NAME: "temp-eks-cluster"
 
 jobs:
   deploy-platform-tools:

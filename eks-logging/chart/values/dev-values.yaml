@@ -39,4 +39,4 @@ fluentd:
   output:
     s3:
       bucket: eks-logs-312ubuntu-dev
-  clusterName: rain-eks-cluster
+  clusterName: temp-eks-cluster

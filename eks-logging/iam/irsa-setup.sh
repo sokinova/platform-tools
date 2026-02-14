@@ -23,7 +23,7 @@ if [[ "${ENVIRONMENT}" != "dev" ]]; then
   fi
 fi
 
-CLUSTER_NAME="rain-eks-cluster"
+CLUSTER_NAME="temp-eks-cluster"
 AWS_REGION=${AWS_REGION:-us-east-1}
 NAMESPACE="logging"
 SERVICE_ACCOUNT_NAME="fluentd-${ENVIRONMENT}"
