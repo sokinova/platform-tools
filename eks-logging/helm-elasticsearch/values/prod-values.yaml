@@ -1,0 +1,26 @@
+# Prod environment values — 3 replicas, large PVC, security on, transport SSL, hard anti-affinity
+
+global:
+  environment: prod
+
+elasticsearch:
+  replicas: 3
+  javaOpts: "-Xmx2g -Xms2g"
+  persistence:
+    enabled: true
+    storageClass: gp2
+    size: 100Gi
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+  antiAffinity: hard
+  pdb:
+    enabled: true
+    maxUnavailable: 1
+  security:
+    enabled: true
+    transportSsl: true

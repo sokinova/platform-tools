@@ -1,0 +1,75 @@
+# Default values for helm-fluentd chart.
+# Dev-friendly defaults — override per environment in values/<env>-values.yaml.
+
+global:
+  team: ubuntu
+  environment: dev
+
+# AWS configuration — accountId must be passed via --set
+aws:
+  accountId: ""
+  region: us-east-1
+
+namespace:
+  create: false  # ES chart creates the namespace
+  name: logging
+
+fluentd:
+  enabled: true
+  image:
+    repository: ""  # Auto-computed from aws.accountId if empty (ECR: fluentd-es-s3)
+    tag: v1.16-es8-s3
+    pullPolicy: Always
+
+  serviceAccount:
+    create: true
+    name: ""  # Defaults to fluentd-<environment> (set in env values files)
+
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  output:
+    elasticsearch:
+      host: "logging-elasticsearch"
+      port: 9200
+      scheme: http
+      buffer:
+        type: file
+        path: /tmp/fluentd-es-buffer
+        flushInterval: 5s
+        flushThreadCount: 2
+        chunkLimitSize: 2M
+        totalLimitSize: 500M
+        retryMaxInterval: 30
+        retryForever: "true"
+    s3:
+      bucket: ""  # e.g. eks-logs-312ubuntu-dev
+      region: us-east-1
+      path: logs/
+      encryption: AES256
+      buffer:
+        type: file
+        path: /tmp/fluentd-s3-buffer
+        timekey: 3600
+        timekeyWait: 10m
+        chunkLimitSize: 8m
+        totalLimitSize: 5G
+
+  clusterName: temp-eks-cluster
+  priorityClassName: ""
+  tolerations:
+    - key: node-role.kubernetes.io/master
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/control-plane
+      effect: NoSchedule
+  updateStrategy:
+    type: RollingUpdate

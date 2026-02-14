@@ -1,0 +1,13 @@
+apiVersion: v2
+name: helm-fluentd
+description: FluentD log collector for centralized logging on Amazon EKS
+type: application
+version: 1.0.0
+appVersion: "1.16"
+keywords:
+  - logging
+  - fluentd
+  - efk
+  - eks
+maintainers:
+  - name: ubuntu-team

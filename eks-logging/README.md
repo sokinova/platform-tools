@@ -27,26 +27,54 @@ Centralized logging solution for Amazon EKS using the EFK stack. Collects contai
 
 ```
 eks-logging/
-├── chart/                           # Custom Helm chart
+├── helm-elasticsearch/              # Elasticsearch Helm chart
 │   ├── Chart.yaml
-│   ├── values.yaml                  # Default values (dev-friendly)
+│   ├── namespace.yaml
+│   ├── values.yaml
 │   ├── values/
 │   │   ├── dev-values.yaml
 │   │   ├── staging-values.yaml
 │   │   └── prod-values.yaml
 │   └── templates/
-│       ├── _helpers.tpl             # Reusable template helpers
-│       ├── NOTES.txt                # Post-install instructions
-│       ├── namespace.yaml
-│       ├── elasticsearch-*.yaml     # ConfigMap, StatefulSet, Service, Headless, PDB
-│       ├── kibana-*.yaml            # ConfigMap, Deployment, Service, Ingress, PDB
-│       └── fluentd-*.yaml           # ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet
-├── docker/                          # Custom FluentD image (if present)
+│       ├── elasticsearch-configmap.yaml
+│       ├── elasticsearch-statefulset.yaml
+│       ├── elasticsearch-service.yaml
+│       ├── elasticsearch-service-headless.yaml
+│       └── elasticsearch-pdb.yaml
+├── helm-kibana/                     # Kibana Helm chart
+│   ├── Chart.yaml
+│   ├── namespace.yaml
+│   ├── values.yaml
+│   ├── values/
+│   │   ├── dev-values.yaml
+│   │   ├── staging-values.yaml
+│   │   └── prod-values.yaml
+│   └── templates/
+│       ├── kibana-configmap.yaml
+│       ├── kibana-deployment.yaml
+│       ├── kibana-service.yaml
+│       ├── kibana-ingress.yaml
+│       └── kibana-pdb.yaml
+├── helm-fluentd/                    # FluentD Helm chart
+│   ├── Chart.yaml
+│   ├── namespace.yaml
+│   ├── values.yaml
+│   ├── values/
+│   │   ├── dev-values.yaml
+│   │   ├── staging-values.yaml
+│   │   └── prod-values.yaml
+│   └── templates/
+│       ├── fluentd-configmap.yaml
+│       ├── fluentd-daemonset.yaml
+│       ├── fluentd-serviceaccount.yaml
+│       ├── fluentd-clusterrole.yaml
+│       └── fluentd-clusterrolebinding.yaml
+├── iam/                             # IRSA setup for FluentD S3 access
+├── docker/                          # Custom FluentD Docker image
 ├── scripts/
 │   ├── deploy.sh                    # Full deployment orchestration
 │   ├── create-kibana-secret.sh      # Kibana auth from SecretsManager
-│   └── test-logging.sh              # Integration tests (12 checks)
-├── namespace.yaml                   # Standalone namespace manifest
+│   └── test-logging.sh              # Integration tests
 └── README.md
 ```
 
@@ -68,9 +96,10 @@ eks-logging/
 This script handles:
 1. IRSA setup for FluentD S3 access (dev only)
 2. Custom FluentD Docker image build/push to ECR
-3. Helm chart deployment with environment-specific values
-4. Kibana auth secret creation
-5. Deployment verification
+3. Elasticsearch Helm chart deployment
+4. Kibana Helm chart deployment
+5. FluentD Helm chart deployment
+6. Kibana auth secret creation and verification
 
 ### Manual Deployment
 
@@ -78,12 +107,24 @@ This script handles:
 # Get AWS account ID
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-# Deploy the chart
-helm upgrade --install efk-dev ./eks-logging/chart \
+# Deploy Elasticsearch (creates namespace)
+helm upgrade --install elasticsearch-dev ./eks-logging/helm-elasticsearch \
   --namespace logging --create-namespace \
-  --values ./eks-logging/chart/values/dev-values.yaml \
+  --values ./eks-logging/helm-elasticsearch/values/dev-values.yaml \
+  --wait --timeout 10m
+
+# Deploy Kibana
+helm upgrade --install kibana-dev ./eks-logging/helm-kibana \
+  --namespace logging \
+  --values ./eks-logging/helm-kibana/values/dev-values.yaml \
+  --wait --timeout 5m
+
+# Deploy FluentD
+helm upgrade --install fluentd-dev ./eks-logging/helm-fluentd \
+  --namespace logging \
+  --values ./eks-logging/helm-fluentd/values/dev-values.yaml \
   --set aws.accountId=${AWS_ACCOUNT_ID} \
-  --wait --timeout 15m
+  --wait --timeout 5m
 
 # Create Kibana auth secret
 ./eks-logging/scripts/create-kibana-secret.sh dev
@@ -106,12 +147,20 @@ kubectl get pods -n logging
 | TLS | No | Yes | Yes |
 | S3 Bucket | eks-logs-312ubuntu-dev | eks-logs-312ubuntu-staging | eks-logs-312ubuntu-prod |
 
+## Cross-Chart References
+
+Each chart is independent. Cross-references use explicit values:
+
+- **ES service name**: `logging-elasticsearch` (set via `namespace.name` + `-elasticsearch`)
+- **Kibana** connects to ES via `elasticsearch.host` / `elasticsearch.port` in its values
+- **FluentD** connects to ES via `fluentd.output.elasticsearch.host` / `port` in its values
+
 ## Security
 
 ### Kibana Access Control
 
-1. **IP Whitelist** — Only requests from whitelisted IPs reach Kibana (configured via `kibana.ingress.whitelistSourceRange`)
-2. **Basic Auth** — Username/password stored in AWS SecretsManager (`eks/logging/kibana-credentials-<env>`)
+1. **IP Whitelist** -- Only requests from whitelisted IPs reach Kibana (configured via `kibana.ingress.whitelistSourceRange`)
+2. **Basic Auth** -- Username/password stored in AWS SecretsManager (`eks/logging/kibana-credentials-<env>`)
 
 ### FluentD S3 Access (IRSA)
 
@@ -124,13 +173,13 @@ FluentD uses IAM Roles for Service Accounts to write logs to S3. The deploy scri
 kubectl get pods -n logging
 
 # Elasticsearch health
-kubectl exec -n logging efk-dev-elasticsearch-0 -- curl -s localhost:9200/_cluster/health | python3 -m json.tool
+kubectl exec -n logging logging-elasticsearch-0 -- curl -s localhost:9200/_cluster/health | python3 -m json.tool
 
 # Kibana logs
 kubectl logs -n logging -l app=kibana
 
 # FluentD logs
-kubectl logs -n logging -l app.kubernetes.io/name=fluentd --tail=50
+kubectl logs -n logging -l app=fluentd --tail=50
 
 # Check ingress
 kubectl get ingress -n logging
@@ -139,13 +188,15 @@ kubectl get ingress -n logging
 ## Cleanup
 
 ```bash
-helm uninstall efk-dev -n logging
+helm uninstall fluentd-dev -n logging
+helm uninstall kibana-dev -n logging
+helm uninstall elasticsearch-dev -n logging
 kubectl delete namespace logging
 ```
 
 ## Dependencies
 
 - **S3 Bucket**: Create `eks-logs-312ubuntu-<env>` before deployment
-- **SecretsManager** (optional): `eks/logging/kibana-credentials-<env>` — script generates defaults if missing
+- **SecretsManager** (optional): `eks/logging/kibana-credentials-<env>` -- script generates defaults if missing
 - **DNS**: Create CNAME record for `kibana-ubuntu-<env>.312ubuntu.com` pointing to NLB hostname
 - **IAM for staging/prod**: Depends on IAM automation (separate ticket)

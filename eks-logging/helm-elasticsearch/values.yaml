@@ -1,0 +1,72 @@
+# Default values for helm-elasticsearch chart.
+# Dev-friendly defaults — override per environment in values/<env>-values.yaml.
+
+global:
+  team: ubuntu
+  environment: dev
+
+namespace:
+  create: true
+  name: logging
+
+elasticsearch:
+  enabled: true
+  image:
+    repository: docker.elastic.co/elasticsearch/elasticsearch
+    tag: 8.5.1
+    pullPolicy: IfNotPresent
+  replicas: 1
+  clusterName: eks-logging
+
+  security:
+    enabled: false
+    transportSsl: false
+
+  javaOpts: "-Xmx512m -Xms512m"
+
+  persistence:
+    enabled: false
+    storageClass: gp2
+    size: 10Gi
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+  # Anti-affinity: "" (none), "soft", or "hard"
+  antiAffinity: ""
+
+  pdb:
+    enabled: false
+    maxUnavailable: 1
+
+  service:
+    type: ClusterIP
+    httpPort: 9200
+    transportPort: 9300
+
+  probes:
+    readiness:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    liveness:
+      initialDelaySeconds: 90
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    startup:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
+
+  sysctlInit:
+    enabled: true
+
+  terminationGracePeriodSeconds: 120

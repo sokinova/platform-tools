@@ -1,0 +1,26 @@
+# Staging environment values — 2 replicas, persistence, security on
+
+global:
+  environment: staging
+
+elasticsearch:
+  replicas: 2
+  javaOpts: "-Xmx1g -Xms1g"
+  persistence:
+    enabled: true
+    storageClass: gp2
+    size: 50Gi
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+  antiAffinity: soft
+  pdb:
+    enabled: true
+    maxUnavailable: 1
+  security:
+    enabled: true
+    transportSsl: false

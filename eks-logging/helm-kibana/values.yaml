@@ -1,0 +1,77 @@
+# Default values for helm-kibana chart.
+# Dev-friendly defaults — override per environment in values/<env>-values.yaml.
+
+global:
+  team: ubuntu
+  environment: dev
+
+namespace:
+  create: false  # ES chart creates the namespace
+  name: logging
+
+elasticsearch:
+  host: "logging-elasticsearch"
+  port: 9200
+
+kibana:
+  enabled: true
+  image:
+    repository: docker.elastic.co/kibana/kibana
+    tag: 8.5.1
+    pullPolicy: IfNotPresent
+  replicas: 1
+  serverName: kibana
+
+  security:
+    enabled: false
+    encryptionKey: ""
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  service:
+    type: ClusterIP
+    port: 5601
+
+  probes:
+    readiness:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    liveness:
+      initialDelaySeconds: 60
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+    startup:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 30
+
+  antiAffinity: ""
+
+  pdb:
+    enabled: false
+    maxUnavailable: 1
+
+  ingress:
+    enabled: true
+    className: nginx
+    host: kibana-ubuntu-dev.312ubuntu.com
+    tls:
+      enabled: false
+      secretName: kibana-tls
+    sslRedirect: "false"
+    whitelistSourceRange: "73.45.178.26/32"
+    authSecret: kibana-basic-auth
+    authRealm: "Kibana Authentication"
+    proxyBodySize: 50m
+    proxyReadTimeout: "120"
+    proxySendTimeout: "120"

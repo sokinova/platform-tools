@@ -1,0 +1,20 @@
+# Dev environment values — single replica, security off, HTTP ingress
+
+global:
+  environment: dev
+
+elasticsearch:
+  host: "logging-elasticsearch"
+  port: 9200
+
+kibana:
+  replicas: 1
+  security:
+    enabled: false
+  ingress:
+    enabled: true
+    host: kibana-ubuntu-dev.312ubuntu.com
+    tls:
+      enabled: false
+    sslRedirect: "false"
+    whitelistSourceRange: "73.45.178.26/32"

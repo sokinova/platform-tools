@@ -1,0 +1,19 @@
+# Staging environment values — larger buffers
+
+global:
+  environment: staging
+
+fluentd:
+  serviceAccount:
+    name: fluentd-staging
+  output:
+    elasticsearch:
+      host: "logging-elasticsearch"
+      port: 9200
+      scheme: http
+      buffer:
+        flushInterval: 10s
+        flushThreadCount: 2
+    s3:
+      bucket: eks-logs-312ubuntu-staging
+  clusterName: eks-cluster-staging

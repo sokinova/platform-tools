@@ -1,0 +1,15 @@
+# Dev environment values
+
+global:
+  environment: dev
+
+fluentd:
+  serviceAccount:
+    name: fluentd-dev
+  output:
+    elasticsearch:
+      host: "logging-elasticsearch"
+      port: 9200
+    s3:
+      bucket: eks-logs-312ubuntu-dev
+  clusterName: temp-eks-cluster

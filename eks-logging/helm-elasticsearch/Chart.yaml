@@ -1,0 +1,13 @@
+apiVersion: v2
+name: helm-elasticsearch
+description: Elasticsearch for centralized logging on Amazon EKS
+type: application
+version: 1.0.0
+appVersion: "8.5.1"
+keywords:
+  - logging
+  - elasticsearch
+  - efk
+  - eks
+maintainers:
+  - name: ubuntu-team

@@ -1,0 +1,86 @@
+{{- if .Values.kibana.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.namespace.name }}-kibana
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app: kibana
+spec:
+  replicas: {{ .Values.kibana.replicas }}
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/kibana-configmap.yaml") . | sha256sum }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: kibana
+          image: "{{ .Values.kibana.image.repository }}:{{ .Values.kibana.image.tag }}"
+          imagePullPolicy: {{ .Values.kibana.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.kibana.service.port }}
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /usr/share/kibana/config/kibana.yml
+              subPath: kibana.yml
+          resources:
+            {{- toYaml .Values.kibana.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /app/kibana
+              port: http
+            initialDelaySeconds: {{ .Values.kibana.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.kibana.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.kibana.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.kibana.probes.readiness.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: /app/kibana
+              port: http
+            initialDelaySeconds: {{ .Values.kibana.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.kibana.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.kibana.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.kibana.probes.liveness.failureThreshold }}
+          startupProbe:
+            httpGet:
+              path: /app/kibana
+              port: http
+            initialDelaySeconds: {{ .Values.kibana.probes.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.kibana.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.kibana.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.kibana.probes.startup.failureThreshold }}
+      {{- if or (eq .Values.kibana.antiAffinity "soft") (eq .Values.kibana.antiAffinity "hard") }}
+      affinity:
+        podAntiAffinity:
+          {{- if eq .Values.kibana.antiAffinity "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: kibana
+              topologyKey: kubernetes.io/hostname
+          {{- else }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: kibana
+                topologyKey: kubernetes.io/hostname
+          {{- end }}
+      {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Values.namespace.name }}-kibana-config
+{{- end }}

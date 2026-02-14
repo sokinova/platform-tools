@@ -1,0 +1,24 @@
+# Prod environment values — 2 replicas, security on, TLS ingress, PDB enabled
+
+global:
+  environment: prod
+
+elasticsearch:
+  host: "logging-elasticsearch"
+  port: 9200
+
+kibana:
+  replicas: 2
+  security:
+    enabled: true
+  ingress:
+    enabled: true
+    host: kibana-ubuntu-prod.312ubuntu.com
+    tls:
+      enabled: true
+      secretName: kibana-tls-prod
+    sslRedirect: "true"
+    whitelistSourceRange: "73.45.178.26/32"
+  pdb:
+    enabled: true
+    maxUnavailable: 1

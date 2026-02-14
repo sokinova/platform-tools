@@ -1,0 +1,21 @@
+# Staging environment values — 1 replica, security on, TLS ingress
+
+global:
+  environment: staging
+
+elasticsearch:
+  host: "logging-elasticsearch"
+  port: 9200
+
+kibana:
+  replicas: 1
+  security:
+    enabled: true
+  ingress:
+    enabled: true
+    host: kibana-ubuntu-staging.312ubuntu.com
+    tls:
+      enabled: true
+      secretName: kibana-tls-staging
+    sslRedirect: "true"
+    whitelistSourceRange: "73.45.178.26/32"

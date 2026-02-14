@@ -37,7 +37,7 @@ echo ""
 
 # Test 2: Check Elasticsearch pods
 echo "[2/8] Checking Elasticsearch..."
-ES_PODS=$(kubectl get pods -n ${NAMESPACE} -l app=elasticsearch-master -o jsonpath='{.items[*].status.phase}' 2>/dev/null)
+ES_PODS=$(kubectl get pods -n ${NAMESPACE} -l app=elasticsearch -o jsonpath='{.items[*].status.phase}' 2>/dev/null)
 if [[ "${ES_PODS}" == *"Running"* ]]; then
   check_result 0 "Elasticsearch pods running"
 else
@@ -45,7 +45,7 @@ else
 fi
 
 # Check Elasticsearch cluster health
-ES_POD=$(kubectl get pods -n ${NAMESPACE} -l app=elasticsearch-master -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+ES_POD=$(kubectl get pods -n ${NAMESPACE} -l app=elasticsearch -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 if [ -n "${ES_POD}" ]; then
   HEALTH=$(kubectl exec -n ${NAMESPACE} ${ES_POD} -- curl -s http://localhost:9200/_cluster/health 2>/dev/null | jq -r '.status' 2>/dev/null)
   if [[ "${HEALTH}" == "green" ]] || [[ "${HEALTH}" == "yellow" ]]; then
@@ -70,12 +70,12 @@ echo ""
 
 # Test 4: Check FluentD pods
 echo "[4/8] Checking FluentD..."
-FLUENTD_PODS=$(kubectl get pods -n ${NAMESPACE} -l app.kubernetes.io/name=fluentd -o jsonpath='{.items[*].status.phase}' 2>/dev/null)
+FLUENTD_PODS=$(kubectl get pods -n ${NAMESPACE} -l app=fluentd -o jsonpath='{.items[*].status.phase}' 2>/dev/null)
 if [[ "${FLUENTD_PODS}" == *"Running"* ]]; then
   check_result 0 "FluentD pods running"
 
   # Count FluentD pods vs nodes
-  FLUENTD_COUNT=$(kubectl get pods -n ${NAMESPACE} -l app.kubernetes.io/name=fluentd --no-headers 2>/dev/null | wc -l)
+  FLUENTD_COUNT=$(kubectl get pods -n ${NAMESPACE} -l app=fluentd --no-headers 2>/dev/null | wc -l)
   NODE_COUNT=$(kubectl get nodes --no-headers 2>/dev/null | wc -l)
   if [ "${FLUENTD_COUNT}" -eq "${NODE_COUNT}" ]; then
     check_result 0 "FluentD DaemonSet running on all ${NODE_COUNT} nodes"
@@ -89,12 +89,12 @@ echo ""
 
 # Test 5: Check Kibana Ingress
 echo "[5/8] Checking Kibana Ingress..."
-INGRESS=$(kubectl get ingress -n ${NAMESPACE} efk-${ENVIRONMENT}-kibana-ingress -o jsonpath='{.spec.rules[0].host}' 2>/dev/null)
+INGRESS=$(kubectl get ingress -n ${NAMESPACE} ${NAMESPACE}-kibana-ingress -o jsonpath='{.spec.rules[0].host}' 2>/dev/null)
 if [ -n "${INGRESS}" ]; then
   check_result 0 "Kibana Ingress configured: ${INGRESS}"
 
   # Check if LB is provisioned
-  LB=$(kubectl get ingress -n ${NAMESPACE} efk-${ENVIRONMENT}-kibana-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+  LB=$(kubectl get ingress -n ${NAMESPACE} ${NAMESPACE}-kibana-ingress -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
   if [ -n "${LB}" ]; then
     check_result 0 "Load balancer provisioned: ${LB}"
   else

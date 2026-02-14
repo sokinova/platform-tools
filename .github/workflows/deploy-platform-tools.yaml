@@ -57,14 +57,28 @@ jobs:
           docker build -t "${ECR_REPO}:v1.16-es8-s3" -f eks-logging/docker/fluentd/Dockerfile .
           docker push "${ECR_REPO}:v1.16-es8-s3"
 
-      - name: Deploy EFK Stack
+      - name: Deploy Elasticsearch
+        run: |
+          helm upgrade --install elasticsearch-${ENVIRONMENT_STAGE} ./eks-logging/helm-elasticsearch \
+            --namespace logging --create-namespace \
+            --values ./eks-logging/helm-elasticsearch/values/${ENVIRONMENT_STAGE}-values.yaml \
+            --wait --timeout 10m
+
+      - name: Deploy Kibana
+        run: |
+          helm upgrade --install kibana-${ENVIRONMENT_STAGE} ./eks-logging/helm-kibana \
+            --namespace logging \
+            --values ./eks-logging/helm-kibana/values/${ENVIRONMENT_STAGE}-values.yaml \
+            --wait --timeout 5m
+
+      - name: Deploy FluentD
         run: |
           AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          helm upgrade --install efk-${ENVIRONMENT_STAGE} ./eks-logging/chart \
-            --namespace logging --create-namespace \
-            --values ./eks-logging/chart/values/${ENVIRONMENT_STAGE}-values.yaml \
+          helm upgrade --install fluentd-${ENVIRONMENT_STAGE} ./eks-logging/helm-fluentd \
+            --namespace logging \
+            --values ./eks-logging/helm-fluentd/values/${ENVIRONMENT_STAGE}-values.yaml \
             --set aws.accountId=${AWS_ACCOUNT_ID} \
-            --wait --timeout 15m
+            --wait --timeout 5m
 
       - name: Create Kibana auth secret
         run: ./eks-logging/scripts/create-kibana-secret.sh ${ENVIRONMENT_STAGE}
