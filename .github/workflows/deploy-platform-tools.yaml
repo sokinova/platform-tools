@@ -15,6 +15,7 @@ permissions:
 env:
   AWS_REGION: "us-east-1"
   ENVIRONMENT_STAGE: "dev"
+  CLUSTER_NAME: "rain-eks-cluster"
 
 jobs:
   deploy-platform-tools:
@@ -36,7 +37,7 @@ jobs:
 
       # Login to EKS, make sure to switch to the permanent cluster created with terraform once it's up
       - name: Login to EKS - update kubeconfig
-        run: aws eks update-kubeconfig --name rain-eks-cluster --region $AWS_REGION
+        run: aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
 
       # Add deployment steps for each tool below
       - name: Deploy ingress-nginx controller
