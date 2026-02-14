@@ -57,6 +57,15 @@ jobs:
           docker build -t "${ECR_REPO}:v1.16-es8-s3" -f eks-logging/docker/fluentd/Dockerfile .
           docker push "${ECR_REPO}:v1.16-es8-s3"
 
+      - name: Cleanup old unified EFK release (migration)
+        run: |
+          if helm status efk-${ENVIRONMENT_STAGE} -n logging >/dev/null 2>&1; then
+            echo "Found old unified release efk-${ENVIRONMENT_STAGE}, uninstalling..."
+            helm uninstall efk-${ENVIRONMENT_STAGE} -n logging --wait
+          else
+            echo "No old unified release found, skipping cleanup."
+          fi
+
       - name: Deploy Elasticsearch
         run: |
           helm upgrade --install elasticsearch-${ENVIRONMENT_STAGE} ./eks-logging/helm-elasticsearch \
