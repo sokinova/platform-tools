@@ -7,7 +7,7 @@ metadata:
   annotations:
     external-dns.alpha.kubernetes.io/hostname: {{ .Values.grafana.ingress.host | quote }}
 spec:
-  ingressClassName: {{ .Values.grafana.ingress.className }}
+  ingressClassName: {{ .Values.grafana.ingress.className | default "nginx"}}
   rules:
     - host: {{ .Values.grafana.ingress.host }}
       http:
@@ -22,6 +22,6 @@ spec:
   tls:
   - hosts:
       - {{ .Values.grafana.ingress.host }}
-    secretName: {{ .Values.grafana.ingress.tlsSecretName }}
+    secretName: {{ .Values.grafana.ingress.tlsSecretName | quote }}
 
 {{- end }}
