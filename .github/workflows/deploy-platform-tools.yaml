@@ -106,7 +106,6 @@ jobs:
               aws eks update-access-entry \
                 --cluster-name "$CLUSTER_NAME" \
                 --principal-arn "$ROLE_ARN" \
-                --type STANDARD \
                 --kubernetes-groups dev-team \
                 --username DeveloperProdAccessRole
             fi
