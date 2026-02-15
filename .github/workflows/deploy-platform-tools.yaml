@@ -15,7 +15,7 @@ permissions:
 env:
   AWS_REGION: "us-east-1"
   ENVIRONMENT_STAGE: "dev"
-  CLUSTER_NAME: "projectx_cluster_ubuntu25b"
+  CLUSTER_NAME: "temp-eks-cluster"
 
 
 jobs:
