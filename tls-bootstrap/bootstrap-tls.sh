@@ -36,14 +36,20 @@ if [ -z "${CERT_MANAGER_ROUTE53_ROLE_ARN:-}" ]; then
   exit 1
 fi
 
-kubectl annotate serviceaccount cert-manager \
-  -n "${CERT_MANAGER_NS}" \
-  eks.amazonaws.com/role-arn="${CERT_MANAGER_ROUTE53_ROLE_ARN}" \
-  --overwrite
+current_role_arn="$(kubectl -n "${CERT_MANAGER_NS}" get sa cert-manager -o jsonpath='{.metadata.annotations.eks\.amazonaws\.com/role-arn}' 2>/dev/null || true)"
+if [ "${current_role_arn}" = "${CERT_MANAGER_ROUTE53_ROLE_ARN}" ]; then
+  echo "✅ ServiceAccount already annotated with correct role ARN. Skipping restart."
+else  
+  echo "⚠️ Updating ServiceAccount annotation (was: '${current_role_arn:-<none>}')"
+  kubectl annotate serviceaccount cert-manager \
+    -n "${CERT_MANAGER_NS}" \
+    eks.amazonaws.com/role-arn="${CERT_MANAGER_ROUTE53_ROLE_ARN}" \
+    --overwrite
 
-echo "🔄 Restarting cert-manager deployment to pick up new IAM role..."
-kubectl -n "${CERT_MANAGER_NS}" rollout restart deploy/cert-manager
-kubectl -n "${CERT_MANAGER_NS}" rollout status deploy/cert-manager --timeout=10m
+  echo "🔄 Restarting cert-manager deployment to pick up new IAM role..."
+  kubectl -n "${CERT_MANAGER_NS}" rollout restart deploy/cert-manager
+  kubectl -n "${CERT_MANAGER_NS}" rollout status deploy/cert-manager --timeout=10m
+fi
 
 ############################################
 # 3️⃣ Ensure ClusterIssuer exists
