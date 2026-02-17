@@ -94,3 +94,17 @@ jobs:
               echo "⏳ Waiting for AWS provider daemonset rollout..."
               kubectl -n kube-system rollout status ds/csi-secrets-store-provider-aws --timeout=10m 
             fi
+
+      - name: Bootstrap TLS
+        env:
+          CLUSTERISSUER_NAME: letsencrypt-prod-dns
+          HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
+          CERT_MANAGER_ROUTE53_ROLE_ARN: ${{ vars.CERT_MANAGER_ROUTE53_ROLE_ARN }}
+          CLUSTER_ISSUER_MANIFEST: tls-bootstrap/clusterissuer.yaml
+          WILDCARD_CERT_MANIFEST: tls-bootstrap/wildcard-cert.yaml
+          WILDCARD_SECRET_NS: ingress-nginx
+          WILDCARD_SECRET_NAME: wildcard-312ubuntu-tls
+          WILDCARD_CERT_NAME: wildcard-312ubuntu-tls
+        run: ./tls-bootstrap/bootstrap-tls.sh
+
+
