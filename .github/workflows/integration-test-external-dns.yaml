@@ -67,22 +67,39 @@ jobs:
       - name: Wait for DNS record + verify nslookup + curl
         env:
           TEST_FQDN: dns-test.312ubuntu.com
+          TEST_NS: external-dns-test
         run: |
           set -eu
 
           echo "Waiting for DNS: $TEST_FQDN"
-          for i in {1..40}; do
+          for i in {1..60}; do
             nslookup "$TEST_FQDN" >/dev/null 2>&1 && break
-            echo "Not ready ($i/40)..."
-            sleep 15
+            echo "Not ready ($i/60)..."
+            sleep 10
           done
 
-          nslookup "$TEST_FQDN" >/dev/null 2>&1 || { echo "DNS FAILED"; exit 1; }
+          if ! nslookup "$TEST_FQDN" >/dev/null 2>&1; then
+            echo "DNS FAILED"
+            echo "---- Ingress Status ----"
+            kubectl get ingress -n "$TEST_NS" dns-test -o wide || true
+            echo "---- ExternalDNS Logs ----"
+            kubectl logs -n external-dns deploy/external-dns --tail=80 || true
+            exit 1
+          fi
+
           echo "DNS OK"
 
           echo "Checking HTTP"
-          curl -fsS "http://$TEST_FQDN" >/dev/null || { echo "HTTP FAILED"; exit 1; }
-          echo "HTTP OK "
+          if ! curl -fsS "http://$TEST_FQDN" >/dev/null; then
+            echo "HTTP FAILED"
+            echo "---- Ingress Status ----"
+            kubectl get ingress -n "$TEST_NS" dns-test -o wide || true
+            echo "---- ExternalDNS Logs ----"
+            kubectl logs -n external-dns deploy/external-dns --tail=80 || true
+            exit 1
+          fi
+
+          echo "HTTP OK"
 
       - name: Cleanup sample resources
         if: always()
