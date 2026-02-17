@@ -36,11 +36,17 @@ jobs:
 
       # Login to EKS, make sure to switch to the permanent cluster created with terraform once it's up
       - name: Login to EKS - update kubeconfig
-        run: aws eks update-kubeconfig --name temporary-eks-cluster-${ENVIRONMENT_STAGE} --region $AWS_REGION
+        run: aws eks update-kubeconfig --name projectx_cluster_ubuntu25b --region $AWS_REGION
 
       # Add deployment steps for each tool below
       - name: Deploy ingress-nginx controller
-        run: kubectl apply -f ingress-nginx/deploy.yaml
+        run: |
+            if kubectl -n ingress-nginx get deploy ingress-nginx-controller >/dev/null 2>&1; then
+              echo "✅ ingress-nginx already installed. Skipping."
+            else
+              echo "⚠️ ingress-nginx not found. Deploying..."
+              kubectl apply -f ingress-nginx/deploy.yaml
+            fi
 
       # Example for a tool like Karpenter
       - name: Deploy Karpenter
@@ -60,3 +66,31 @@ jobs:
         run: |
             echo "Final deployment steps and cleanup"
 
+      - name: Deploy Secrets Store CSI Driver
+        run: |
+            if kubectl -n kube-system get ds csi-secrets-store-secrets-store-csi-driver >/dev/null 2>&1; then
+              echo "✅ Secrets Store CSI Driver already installed. Skipping."
+            else
+              echo "⚠️ CSI Driver not found. Installing via Helm..."
+              helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+              helm repo update
+
+              helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
+              -n kube-system \
+              --set syncSecret.enabled=true
+
+              echo "⏳ Waiting for CSI driver daemonset rollout..."
+              kubectl -n kube-system rollout status ds/csi-secrets-store-secrets-store-csi-driver --timeout=10m
+            fi
+
+      - name: Deploy AWS provider for Secrets Store CSI
+        run: |
+            if kubectl -n kube-system get ds csi-secrets-store-provider-aws >/dev/null 2>&1; then
+              echo "✅ AWS provider already installed. Skipping."
+            else
+              echo "⚠️ AWS provider not found. Installing..."
+              kubectl apply -f https://raw.githubusercontent.com/aws/secrets-store-csi-driver-provider-aws/main/deployment/aws-provider-installer.yaml
+
+              echo "⏳ Waiting for AWS provider daemonset rollout..."
+              kubectl -n kube-system rollout status ds/csi-secrets-store-provider-aws --timeout=10m 
+            fi
