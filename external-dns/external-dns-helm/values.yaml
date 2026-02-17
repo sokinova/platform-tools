@@ -8,7 +8,7 @@ image:
 serviceAccount:
   create: true
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::383585068161:role/dev-external-dns-irsa
+    eks.amazonaws.com/role-arn: arn:aws:iam::383585068161:role/dev-temp-eks-cluster-external-dns-irsa
   name: external-dns
   automountServiceAccountToken: true
 
@@ -90,8 +90,6 @@ annotationFilter: external-dns.alpha.kubernetes.io/hostname
 
 # -- Annotation prefix for external-dns annotations (useful for split horizon DNS with multiple instances).
 annotationPrefix: # @schema type: [string,null]; default: null
-
-
 
 provider: 
   name: aws
