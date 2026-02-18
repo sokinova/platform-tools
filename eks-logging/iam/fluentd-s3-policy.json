@@ -1,5 +1,4 @@
 {
-  "_comment": "IAM policy template for FluentD S3 access. The bucket name 'eks-logs-312ubuntu-dev' is replaced by irsa-setup.sh with the environment-specific bucket name (e.g., eks-logs-312ubuntu-staging).",
   "Version": "2012-10-17",
   "Statement": [
     {
