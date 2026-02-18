@@ -64,7 +64,7 @@ fluentd:
         chunkLimitSize: 8m
         totalLimitSize: 5G
 
-  clusterName: temp-eks-cluster
+  clusterName: projectx_cluster_ubuntu25b
   priorityClassName: ""
   tolerations:
     - key: node-role.kubernetes.io/master

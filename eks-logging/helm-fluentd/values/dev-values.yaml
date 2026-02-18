@@ -12,4 +12,4 @@ fluentd:
       port: 9200
     s3:
       bucket: eks-logs-312ubuntu-dev
-  clusterName: temp-eks-cluster
+  clusterName: projectx_cluster_ubuntu25b

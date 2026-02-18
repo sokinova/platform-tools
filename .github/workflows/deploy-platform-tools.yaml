@@ -15,7 +15,7 @@ permissions:
 env:
   AWS_REGION: "us-east-1"
   ENVIRONMENT_STAGE: "dev"
-  CLUSTER_NAME: "temp-eks-cluster"
+  CLUSTER_NAME: "projectx_cluster_ubuntu25b"
 
 jobs:
   deploy-platform-tools:
@@ -56,15 +56,6 @@ jobs:
             aws ecr create-repository --repository-name fluentd-es-s3 --image-scanning-configuration scanOnPush=true --region ${AWS_REGION}
           docker build -t "${ECR_REPO}:v1.16-es8-s3" -f eks-logging/docker/fluentd/Dockerfile .
           docker push "${ECR_REPO}:v1.16-es8-s3"
-
-      - name: Cleanup old unified EFK release (migration)
-        run: |
-          if helm status efk-${ENVIRONMENT_STAGE} -n logging >/dev/null 2>&1; then
-            echo "Found old unified release efk-${ENVIRONMENT_STAGE}, uninstalling..."
-            helm uninstall efk-${ENVIRONMENT_STAGE} -n logging --no-hooks || true
-          else
-            echo "No old unified release found, skipping cleanup."
-          fi
 
       - name: Deploy Elasticsearch
         run: |
