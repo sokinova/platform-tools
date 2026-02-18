@@ -1,3 +1,6 @@
+# ClusterRoleBinding — binds the FluentD ClusterRole to the FluentD ServiceAccount.
+# This gives FluentD pods the K8s API permissions defined in the ClusterRole
+# (read pods and namespaces for log enrichment).
 {{- if .Values.fluentd.enabled }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -10,6 +13,7 @@ roleRef:
   kind: ClusterRole
   name: {{ .Values.namespace.name }}-fluentd
 subjects:
+  # Bind to the FluentD service account in the logging namespace
   - kind: ServiceAccount
     name: {{ .Values.fluentd.serviceAccount.name }}
     namespace: {{ .Values.namespace.name }}

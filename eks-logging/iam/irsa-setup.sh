@@ -1,13 +1,32 @@
 #!/bin/bash
-# IRSA (IAM Roles for Service Accounts) setup script for FluentD S3 access
+# ============================================================
+# IRSA (IAM Roles for Service Accounts) Setup Script
+# ============================================================
+# Creates the IAM role and policy that allows FluentD pods to write logs to S3.
+# Uses OIDC federation so Kubernetes service accounts can assume IAM roles
+# without storing static AWS credentials in the cluster.
+#
 # NOTE: This is a TEMPORARY setup for dev environment testing only.
 #       For staging/prod, IAM automation (MRP25BUBUN-6) should handle this.
+#
+# What this script does:
+#   1. Queries the EKS cluster's OIDC provider URL
+#   2. Associates the OIDC provider with IAM (if not already done)
+#   3. Creates an IAM policy allowing S3 read/write to the env-specific bucket
+#   4. Creates an IAM role with a trust policy scoped to the FluentD service account
+#   5. Attaches the policy to the role
+#
+# Usage:
+#   ./irsa-setup.sh dev          # Sets up IRSA for the dev environment
+#   CLUSTER_NAME=my-cluster ./irsa-setup.sh staging
+# ============================================================
 
 set -e
 
-# Configuration - DEV ONLY
+# Accept environment as first argument, default to "dev"
 ENVIRONMENT=${1:-dev}
 
+# Warn if running for non-dev environments (should use IAM automation instead)
 if [[ "${ENVIRONMENT}" != "dev" ]]; then
   echo "WARNING: This script is intended for dev environment only."
   echo "For staging/prod, IAM should be managed by MRP25BUBUN-6 (IAM automation)."
@@ -23,6 +42,7 @@ if [[ "${ENVIRONMENT}" != "dev" ]]; then
   fi
 fi
 
+# Configuration — uses env vars with sensible defaults
 CLUSTER_NAME="${CLUSTER_NAME:-projectx_cluster_ubuntu25b}"
 AWS_REGION=${AWS_REGION:-us-east-1}
 NAMESPACE="logging"
@@ -34,11 +54,12 @@ echo "Setting up IRSA for FluentD in ${ENVIRONMENT} environment..."
 echo "NOTE: This is temporary for dev testing. Staging/prod should use IAM automation."
 echo ""
 
-# Get AWS Account ID
+# Get the AWS account ID from the caller's identity
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 echo "AWS Account ID: ${AWS_ACCOUNT_ID}"
 
-# Get OIDC Provider URL
+# Get the OIDC provider URL from the EKS cluster
+# This URL is used to establish trust between the K8s service account and IAM
 OIDC_PROVIDER=$(aws eks describe-cluster --name ${CLUSTER_NAME} --region ${AWS_REGION} \
   --query "cluster.identity.oidc.issuer" --output text | sed -e "s/^https:\/\///")
 
@@ -48,7 +69,8 @@ if [ -z "${OIDC_PROVIDER}" ]; then
 fi
 echo "OIDC Provider: ${OIDC_PROVIDER}"
 
-# Check if OIDC provider is already associated
+# Associate the OIDC provider with IAM if not already done
+# This is a one-time setup per cluster that enables IRSA functionality
 OIDC_PROVIDER_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/${OIDC_PROVIDER}"
 if ! aws iam get-open-id-connect-provider --open-id-connect-provider-arn ${OIDC_PROVIDER_ARN} 2>/dev/null; then
   echo "Creating OIDC provider..."
@@ -58,17 +80,19 @@ if ! aws iam get-open-id-connect-provider --open-id-connect-provider-arn ${OIDC_
     --approve
 fi
 
-# Create IAM policy
+# Create or update the IAM policy for S3 access
+# Uses the template from fluentd-s3-policy.json with the bucket name substituted
 POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:policy/${POLICY_NAME}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Substitute environment-specific bucket name in the policy template
+# Replace the dev bucket name in the template with the environment-specific bucket
 S3_BUCKET="eks-logs-312ubuntu-${ENVIRONMENT}"
 POLICY_FILE=$(mktemp)
 sed "s/eks-logs-312ubuntu-dev/${S3_BUCKET}/g" ${SCRIPT_DIR}/fluentd-s3-policy.json > ${POLICY_FILE}
 
 if aws iam get-policy --policy-arn ${POLICY_ARN} 2>/dev/null; then
   echo "Policy ${POLICY_NAME} already exists, updating..."
+  # IAM policies have a max of 5 versions; delete the oldest non-default version before creating a new one
   POLICY_VERSION=$(aws iam list-policy-versions --policy-arn ${POLICY_ARN} \
     --query 'Versions[?IsDefaultVersion==`false`].VersionId' --output text | head -1)
   if [ -n "${POLICY_VERSION}" ]; then
@@ -86,7 +110,9 @@ else
 fi
 rm -f ${POLICY_FILE}
 
-# Create trust policy document
+# Create the trust policy document for the IAM role
+# This trust policy allows ONLY the specific K8s service account (fluentd-<env>)
+# in the specific namespace (logging) to assume this role via OIDC federation
 TRUST_POLICY=$(cat <<EOF
 {
   "Version": "2012-10-17",
@@ -109,7 +135,7 @@ TRUST_POLICY=$(cat <<EOF
 EOF
 )
 
-# Create or update IAM role
+# Create or update the IAM role with the trust policy
 ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/${ROLE_NAME}"
 if aws iam get-role --role-name ${ROLE_NAME} 2>/dev/null; then
   echo "Role ${ROLE_NAME} already exists, updating trust policy..."
@@ -124,7 +150,7 @@ else
     --description "Temporary IAM role for FluentD S3 access in ${ENVIRONMENT} (dev testing)"
 fi
 
-# Attach policy to role
+# Attach the S3 policy to the role
 echo "Attaching policy to role..."
 aws iam attach-role-policy \
   --role-name ${ROLE_NAME} \

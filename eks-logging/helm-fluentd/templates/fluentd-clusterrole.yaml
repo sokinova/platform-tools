@@ -1,3 +1,9 @@
+# ClusterRole for FluentD — grants read-only access to pods and namespaces.
+# FluentD needs this to query the K8s API for pod metadata (pod name, namespace,
+# container name, labels) which it uses to enrich log records via the
+# kubernetes_metadata filter plugin.
+# This is a ClusterRole (not namespaced Role) because FluentD collects logs
+# from ALL namespaces, not just the "logging" namespace.
 {{- if .Values.fluentd.enabled }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -6,6 +12,7 @@ metadata:
   labels:
     app: fluentd
 rules:
+  # Read-only access to pods and namespaces for log enrichment
   - apiGroups: [""]
     resources:
       - pods

@@ -1,13 +1,22 @@
-# Dev environment values — single replica, no persistence, security off
+# Dev environment values for Elasticsearch.
+# Single replica, no persistence, security off — optimized for fast iteration.
+# Data is stored in emptyDir and lost on pod restart (acceptable for dev).
 
 global:
   environment: dev
 
 elasticsearch:
+  # Single node cluster for dev — no HA needed
   replicas: 1
+
+  # 512MB heap is enough for dev log volume
   javaOpts: "-Xmx512m -Xms512m"
+
+  # No persistent storage — uses emptyDir (data lost on pod restart)
   persistence:
     enabled: false
+
+  # Minimal resources for dev workloads
   resources:
     requests:
       cpu: 500m
@@ -15,8 +24,14 @@ elasticsearch:
     limits:
       cpu: "1"
       memory: 2Gi
+
+  # No anti-affinity needed with single replica
   antiAffinity: ""
+
+  # No PDB needed with single replica
   pdb:
     enabled: false
+
+  # Xpack security disabled — simplifies dev setup
   security:
     enabled: false

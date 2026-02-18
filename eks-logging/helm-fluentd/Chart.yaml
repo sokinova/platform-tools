@@ -1,3 +1,16 @@
+# Helm chart metadata for the FluentD component of the EFK logging stack.
+# FluentD runs as a DaemonSet (one pod per node) to collect container logs from every node.
+# It sends logs to two destinations: Elasticsearch (real-time search) and S3 (long-term backup).
+# Uses a custom Docker image (from ECR) with both the ES8 and S3 output plugins.
+# Requires IRSA (IAM Roles for Service Accounts) for S3 write access.
+#
+# Usage:
+#   helm upgrade --install fluentd-dev ./eks-logging/helm-fluentd \
+#     --namespace logging \
+#     --values ./eks-logging/helm-fluentd/values/dev-values.yaml \
+#     --set aws.accountId=${AWS_ACCOUNT_ID} \
+#     --wait --timeout 5m
+
 apiVersion: v2
 name: helm-fluentd
 description: FluentD log collector for centralized logging on Amazon EKS

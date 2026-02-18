@@ -1,15 +1,24 @@
-# Dev environment values
+# Dev environment values for FluentD.
+# Connects to the dev ES cluster and writes backup logs to the dev S3 bucket.
+# Uses the dev IRSA service account (fluentd-dev) for S3 write permissions.
 
 global:
   environment: dev
 
 fluentd:
+  # Service account name — must match the IRSA trust policy in iam/irsa-setup.sh
   serviceAccount:
     name: fluentd-dev
+
   output:
+    # Elasticsearch connection — cross-chart reference to the ES service
     elasticsearch:
       host: "logging-elasticsearch"
       port: 9200
+
+    # S3 backup bucket for the dev environment
     s3:
       bucket: eks-logs-312ubuntu-dev
+
+  # Cluster name — injected into every log record for identification
   clusterName: projectx_cluster_ubuntu25b

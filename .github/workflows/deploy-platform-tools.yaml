@@ -1,5 +1,19 @@
-# This worflow is primarily for platform/devops tools that need to be deployed into K8s cluster
-# or tools that don't belong to Terraform
+# ============================================================
+# Platform Tools Deployment Workflow
+# ============================================================
+# Deploys platform tools (ingress-nginx, EFK logging stack, Karpenter, etc.)
+# to the EKS cluster. Triggers on push to main or feature branches.
+#
+# EFK deployment order:
+#   1. IRSA setup — IAM role for FluentD S3 access
+#   2. ECR build  — Custom FluentD image with ES8 + S3 plugins
+#   3. Elasticsearch — First (creates namespace, provides the search backend)
+#   4. Kibana — Second (connects to ES for log visualization)
+#   5. FluentD — Third (collects logs from all nodes, sends to ES + S3)
+#   6. Auth secret — Kibana basic-auth credentials
+#   7. Verify + integration tests
+# ============================================================
+
 name: 'Workflow - Deploy Platform Tools'
 
 on:
@@ -8,10 +22,12 @@ on:
       - feature/**
       - main
 
+# OIDC permissions for AWS authentication (no stored access keys)
 permissions:
   id-token: write
   contents: read
 
+# Environment variables shared across all steps
 env:
   AWS_REGION: "us-east-1"
   ENVIRONMENT_STAGE: "dev"
@@ -28,6 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # Authenticate with AWS using OIDC (GitHub Actions role)
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -35,18 +52,21 @@ jobs:
           role-session-name: GitHubActionsRoleSession
           aws-region: ${{ env.AWS_REGION }}
 
-      # Login to EKS, make sure to switch to the permanent cluster created with terraform once it's up
+      # Connect kubectl to the EKS cluster
       - name: Login to EKS - update kubeconfig
         run: aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
 
-      # Add deployment steps for each tool below
+      # Deploy the nginx ingress controller (required before any Ingress resources)
       - name: Deploy ingress-nginx controller
         run: kubectl apply -f ingress-nginx/deploy.yaml
 
       # --- EFK Logging Stack ---
+
+      # Create the IAM role and trust policy for FluentD's S3 access via IRSA
       - name: Setup IRSA for FluentD
         run: ./eks-logging/iam/irsa-setup.sh ${ENVIRONMENT_STAGE}
 
+      # Build the custom FluentD Docker image (with ES8 + S3 plugins) and push to ECR
       - name: Login to ECR and build FluentD image
         run: |
           AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -57,6 +77,8 @@ jobs:
           docker build -t "${ECR_REPO}:v1.16-es8-s3" -f eks-logging/docker/fluentd/Dockerfile .
           docker push "${ECR_REPO}:v1.16-es8-s3"
 
+      # Deploy Elasticsearch first — it creates the logging namespace and provides the
+      # search backend that Kibana and FluentD depend on
       - name: Deploy Elasticsearch
         run: |
           helm upgrade --install elasticsearch-${ENVIRONMENT_STAGE} ./eks-logging/helm-elasticsearch \
@@ -64,6 +86,7 @@ jobs:
             --values ./eks-logging/helm-elasticsearch/values/${ENVIRONMENT_STAGE}-values.yaml \
             --wait --timeout 10m
 
+      # Deploy Kibana — connects to ES using the explicit "logging-elasticsearch" service name
       - name: Deploy Kibana
         run: |
           helm upgrade --install kibana-${ENVIRONMENT_STAGE} ./eks-logging/helm-kibana \
@@ -71,6 +94,8 @@ jobs:
             --values ./eks-logging/helm-kibana/values/${ENVIRONMENT_STAGE}-values.yaml \
             --wait --timeout 5m
 
+      # Deploy FluentD — pass AWS account ID at install time for IRSA annotation
+      # and ECR image URL computation in the DaemonSet template
       - name: Deploy FluentD
         run: |
           AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -80,27 +105,27 @@ jobs:
             --set aws.accountId=${AWS_ACCOUNT_ID} \
             --wait --timeout 5m
 
+      # Create the Kibana basic-auth K8s secret (credentials from SecretsManager)
       - name: Create Kibana auth secret
         run: ./eks-logging/scripts/create-kibana-secret.sh ${ENVIRONMENT_STAGE}
 
+      # Verify all EFK components are deployed and running
       - name: Verify EFK deployment
         run: |
           kubectl get pods -n logging
           kubectl get svc -n logging
           kubectl get ingress -n logging
 
+      # Run integration tests — checks ES health, pod status, log flow, S3 writes
       - name: Run EFK integration tests
         run: ./eks-logging/scripts/test-logging.sh ${ENVIRONMENT_STAGE}
 
-      # Example for a tool like Karpenter
+      # Placeholder for Karpenter deployment (separate ticket)
       - name: Deploy Karpenter
         run: |
             echo "Deploy Karpenter steps go here"
 
-      # Repeat for each additional tool...
-      # Example: Deploy External DNS
-      # Example: Setup K8s User Roles
-
+      # Placeholder for additional platform tools
       - name: Finalize Deployment
         run: |
             echo "Final deployment steps and cleanup"

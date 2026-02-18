@@ -1,24 +1,36 @@
-# Prod environment values — 2 replicas, security on, TLS ingress, PDB enabled
+# Prod environment values for Kibana.
+# 2 replicas for HA, security on, TLS ingress, PDB enabled.
+# Full production configuration with redundancy.
 
 global:
   environment: prod
 
+# Elasticsearch service name — same across all environments
 elasticsearch:
   host: "logging-elasticsearch"
   port: 9200
 
 kibana:
+  # Two replicas for high availability
   replicas: 2
+
+  # Xpack security enabled — must match the prod ES cluster's security settings
   security:
     enabled: true
+
   ingress:
     enabled: true
+    # Prod Kibana URL
     host: kibana-ubuntu-prod.312ubuntu.com
+    # TLS enabled — requires cert-manager with letsencrypt-prod cluster issuer
     tls:
       enabled: true
       secretName: kibana-tls-prod
     sslRedirect: "true"
+    # IP whitelist — same team IP
     whitelistSourceRange: "73.45.178.26/32"
+
+  # PDB ensures at least 1 Kibana pod is always available during disruptions
   pdb:
     enabled: true
     maxUnavailable: 1

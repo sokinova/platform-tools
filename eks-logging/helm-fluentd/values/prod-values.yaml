@@ -1,25 +1,41 @@
-# Prod environment values — 4 flush threads, large buffers, priority class
+# Prod environment values for FluentD.
+# 4 flush threads, large buffers, and system-node-critical priority class.
+# Designed for high log volume with maximum reliability.
+# NOTE: clusterName is a placeholder — update to the real prod cluster name when available.
 
 global:
   environment: prod
 
 fluentd:
+  # Service account name — must match the IRSA trust policy for prod
   serviceAccount:
     name: fluentd-prod
+
   output:
+    # Elasticsearch connection — same service name across all environments
     elasticsearch:
       host: "logging-elasticsearch"
       port: 9200
       scheme: http
       buffer:
         flushInterval: 10s
+        # 4 flush threads for high throughput in prod
         flushThreadCount: 4
+        # Larger chunk size to reduce the number of ES bulk requests
         chunkLimitSize: 4M
         totalLimitSize: 1G
+
+    # S3 backup bucket for the prod environment
     s3:
       bucket: eks-logs-312ubuntu-prod
       buffer:
+        # Very large buffers for prod — handles burst log volume without dropping
         chunkLimitSize: 512M
         totalLimitSize: 10G
+
+  # Placeholder — update to the real prod EKS cluster name
   clusterName: eks-cluster-prod
+
+  # system-node-critical ensures FluentD is never evicted by the kubelet
+  # even when the node is under resource pressure
   priorityClassName: system-node-critical

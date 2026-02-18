@@ -1,15 +1,24 @@
-# Prod environment values — 3 replicas, large PVC, security on, transport SSL, hard anti-affinity
+# Prod environment values for Elasticsearch.
+# 3 replicas with large PVCs, full security, transport SSL, and hard anti-affinity.
+# Designed for high availability and data durability.
 
 global:
   environment: prod
 
 elasticsearch:
+  # Three nodes — allows 1 node failure while maintaining quorum and shard replicas
   replicas: 3
+
+  # 2GB heap for high log volume (should be ~50% of memory limit)
   javaOpts: "-Xmx2g -Xms2g"
+
+  # 100Gi gp2 EBS persistent volumes for long-term log retention
   persistence:
     enabled: true
     storageClass: gp2
     size: 100Gi
+
+  # Production-grade resources
   resources:
     requests:
       cpu: "2"
@@ -17,10 +26,16 @@ elasticsearch:
     limits:
       cpu: "4"
       memory: 8Gi
+
+  # Hard anti-affinity — ES pods MUST run on different nodes
   antiAffinity: hard
+
+  # PDB ensures at least 2 of 3 nodes are always available
   pdb:
     enabled: true
     maxUnavailable: 1
+
+  # Full security — xpack enabled with transport SSL for inter-node encryption
   security:
     enabled: true
     transportSsl: true

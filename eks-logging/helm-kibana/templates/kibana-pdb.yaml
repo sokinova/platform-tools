@@ -1,3 +1,6 @@
+# PodDisruptionBudget for Kibana — prevents all replicas from being evicted at once.
+# Only enabled in prod where replicas > 1. Ensures the Kibana UI stays available
+# during node drains and cluster upgrades.
 {{- if and .Values.kibana.enabled .Values.kibana.pdb.enabled }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget

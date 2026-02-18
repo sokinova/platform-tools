@@ -1,3 +1,6 @@
+# ClusterIP service for Elasticsearch — the primary access point for Kibana and FluentD.
+# Kibana and FluentD connect to this service using the cross-chart reference value
+# "logging-elasticsearch" (derived from namespace.name + "-elasticsearch").
 {{- if .Values.elasticsearch.enabled }}
 apiVersion: v1
 kind: Service
@@ -9,10 +12,12 @@ metadata:
 spec:
   type: {{ .Values.elasticsearch.service.type }}
   ports:
+    # HTTP REST API — used by clients (Kibana, FluentD, curl)
     - name: http
       port: {{ .Values.elasticsearch.service.httpPort }}
       targetPort: http
       protocol: TCP
+    # Transport — used for inter-node cluster communication
     - name: transport
       port: {{ .Values.elasticsearch.service.transportPort }}
       targetPort: transport

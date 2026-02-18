@@ -1,3 +1,6 @@
+# Kibana Deployment — runs the Kibana web UI that connects to Elasticsearch.
+# Uses a Deployment (not StatefulSet) because Kibana is stateless — it stores
+# dashboards and settings in ES, not locally.
 {{- if .Values.kibana.enabled }}
 apiVersion: apps/v1
 kind: Deployment
@@ -16,8 +19,10 @@ spec:
       labels:
         app: kibana
       annotations:
+        # Config checksum — forces a rolling restart when kibana.yml changes
         checksum/config: {{ include (print $.Template.BasePath "/kibana-configmap.yaml") . | sha256sum }}
     spec:
+      # Run Kibana as non-root user (UID 1000) for security best practices
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -27,15 +32,19 @@ spec:
           image: "{{ .Values.kibana.image.repository }}:{{ .Values.kibana.image.tag }}"
           imagePullPolicy: {{ .Values.kibana.image.pullPolicy }}
           ports:
+            # Kibana HTTP port — the Service and Ingress route traffic here
             - name: http
               containerPort: {{ .Values.kibana.service.port }}
               protocol: TCP
           volumeMounts:
+            # Mount the ConfigMap as kibana.yml
             - name: config
               mountPath: /usr/share/kibana/config/kibana.yml
               subPath: kibana.yml
           resources:
             {{- toYaml .Values.kibana.resources | nindent 12 }}
+
+          # Readiness probe — Kibana only receives traffic when /app/kibana returns 200
           readinessProbe:
             httpGet:
               path: /app/kibana
@@ -44,6 +53,8 @@ spec:
             periodSeconds: {{ .Values.kibana.probes.readiness.periodSeconds }}
             timeoutSeconds: {{ .Values.kibana.probes.readiness.timeoutSeconds }}
             failureThreshold: {{ .Values.kibana.probes.readiness.failureThreshold }}
+
+          # Liveness probe — restarts Kibana if it becomes unresponsive
           livenessProbe:
             httpGet:
               path: /app/kibana
@@ -52,6 +63,8 @@ spec:
             periodSeconds: {{ .Values.kibana.probes.liveness.periodSeconds }}
             timeoutSeconds: {{ .Values.kibana.probes.liveness.timeoutSeconds }}
             failureThreshold: {{ .Values.kibana.probes.liveness.failureThreshold }}
+
+          # Startup probe — gives Kibana time to connect to ES and initialize
           startupProbe:
             httpGet:
               path: /app/kibana
@@ -60,6 +73,8 @@ spec:
             periodSeconds: {{ .Values.kibana.probes.startup.periodSeconds }}
             timeoutSeconds: {{ .Values.kibana.probes.startup.timeoutSeconds }}
             failureThreshold: {{ .Values.kibana.probes.startup.failureThreshold }}
+
+      # Pod anti-affinity — spreads Kibana pods across nodes (relevant for prod with 2 replicas)
       {{- if or (eq .Values.kibana.antiAffinity "soft") (eq .Values.kibana.antiAffinity "hard") }}
       affinity:
         podAntiAffinity:
@@ -80,6 +95,7 @@ spec:
           {{- end }}
       {{- end }}
       volumes:
+        # ConfigMap volume containing kibana.yml
         - name: config
           configMap:
             name: {{ .Values.namespace.name }}-kibana-config

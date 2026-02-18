@@ -1,3 +1,6 @@
+# Kibana configuration file (kibana.yml) rendered as a ConfigMap.
+# Mounted into the Kibana container at /usr/share/kibana/config/kibana.yml.
+# Configures the ES connection URL and security settings.
 {{- if .Values.kibana.enabled }}
 apiVersion: v1
 kind: ConfigMap
@@ -9,12 +12,21 @@ metadata:
 data:
   kibana.yml: |
     server.name: {{ .Values.kibana.serverName }}
+    # Listen on all interfaces so the K8s service can route traffic to the pod
     server.host: "0.0.0.0"
+
+    # Elasticsearch connection — uses explicit values from the chart (cross-chart reference)
+    # Default resolves to "http://logging-elasticsearch:9200"
     elasticsearch.hosts:
       - "http://{{ .Values.elasticsearch.host }}:{{ .Values.elasticsearch.port }}"
 
+    # Xpack security — only rendered when security is enabled (staging/prod)
+    # NOTE: Do NOT set xpack.security.enabled=false in Kibana 8.x — the key is not
+    # recognized and causes a FATAL crash. Only include the block when security is ON.
     {{- if .Values.kibana.security.enabled }}
     xpack.security.enabled: true
+    # Encryption keys are required when xpack security is enabled
+    # They encrypt saved objects, reports, and security tokens
     {{- if .Values.kibana.security.encryptionKey }}
     xpack.encryptedSavedObjects.encryptionKey: {{ .Values.kibana.security.encryptionKey | quote }}
     xpack.reporting.encryptionKey: {{ .Values.kibana.security.encryptionKey | quote }}

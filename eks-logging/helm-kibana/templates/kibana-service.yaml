@@ -1,3 +1,5 @@
+# ClusterIP service for Kibana — internal access point on port 5601.
+# The Ingress routes external traffic to this service.
 {{- if .Values.kibana.enabled }}
 apiVersion: v1
 kind: Service
@@ -9,6 +11,7 @@ metadata:
 spec:
   type: {{ .Values.kibana.service.type }}
   ports:
+    # Kibana HTTP UI port
     - name: http
       port: {{ .Values.kibana.service.port }}
       targetPort: http
