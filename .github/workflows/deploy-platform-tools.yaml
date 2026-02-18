@@ -15,6 +15,8 @@ permissions:
 env:
   AWS_REGION: "us-east-1"
   ENVIRONMENT_STAGE: "dev"
+  CLUSTER_NAME: "projectx_cluster_ubuntu25b"
+
 
 jobs:
   deploy-platform-tools:
@@ -34,9 +36,28 @@ jobs:
           role-session-name: GitHubActionsRoleSession
           aws-region: ${{ env.AWS_REGION }}
 
+      # Install Helm
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.13.0'
+      
+      #Install AWS CLI
+      - name: Ensure AWS CLI is installed
+        run: |
+            if ! command -v aws &> /dev/null
+            then
+              echo "AWS CLI not found. Installing..."
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              unzip -q awscliv2.zip
+              sudo ./aws/install
+            else
+              echo "AWS CLI already installed"
+            fi
+
       # Login to EKS, make sure to switch to the permanent cluster created with terraform once it's up
-      - name: Login to EKS - update kubeconfig
-        run: aws eks update-kubeconfig --name temporary-eks-cluster-${ENVIRONMENT_STAGE} --region $AWS_REGION
+      - name: Login to EKS - update kubeconfig.
+        run: aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
 
       # Add deployment steps for each tool below
       - name: Deploy ingress-nginx controller
@@ -51,10 +72,49 @@ jobs:
       - name: Deploy EKS Logging
         run: |
             echo "Deploy EKS Logging steps go here"
-
+      
       # Repeat for each additional tool...
       # Example: Deploy External DNS
-      # Example: Setup K8s User Roles
+      # Setup K8s User Roles
+      # Create Cluster role and RBAC
+      - name: Deploy Cluster role and RBAC
+        run: |
+            helm upgrade --install read-access k8s-user-roles/ReadAccessClusterRole \
+            -f k8s-user-roles/ReadAccessClusterRole/values-${ENVIRONMENT_STAGE}.yaml \
+            --namespace helm-system \
+            --create-namespace  
+
+      # Create aws eks access entry
+      - name: Ensure EKS Access Entry
+        run: |
+            set -e  # exit on any error
+
+            ROLE_ARN="arn:aws:iam::383585068161:role/DeveloperProdAccessRole-ubuntu25b"
+
+            if ! aws eks describe-access-entry \
+                --cluster-name "$CLUSTER_NAME" \
+                --principal-arn "$ROLE_ARN" >/dev/null 2>&1; then
+              echo "Access entry not found. Creating..."
+              aws eks create-access-entry \
+                --cluster-name "$CLUSTER_NAME" \
+                --principal-arn "$ROLE_ARN" \
+                --type STANDARD \
+                --kubernetes-groups dev-team \
+                --username DeveloperProdAccessRole
+            else
+              echo "Access entry exists. Updating..."
+              aws eks update-access-entry \
+                --cluster-name "$CLUSTER_NAME" \
+                --principal-arn "$ROLE_ARN" \
+                --kubernetes-groups dev-team \
+                --username DeveloperProdAccessRole
+            fi
+
+      # Verify Access Entry 
+      - name: Verify Access Entry
+        run: |
+          aws eks list-access-entries \
+            --cluster-name $CLUSTER_NAME
 
       - name: Finalize Deployment
         run: |
