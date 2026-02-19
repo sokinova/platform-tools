@@ -24,12 +24,12 @@ grafana:
     className: nginx
     host: grafana-ubuntu-dev.312ubuntu.com
     tlsSecretName: wildcard-312ubuntu-tls
+    whitelistSourceRange: "98.212.25.0/32"
 
 prometheus:
   enabled: true
   image: prom/prometheus:v2.52.0
   replicas: 1
-
   service:
     type: ClusterIP
     port: 9090

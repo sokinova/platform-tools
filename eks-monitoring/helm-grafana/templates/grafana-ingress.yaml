@@ -5,6 +5,7 @@ metadata:
   name: grafana
   namespace: {{ .Values.namespace.name }}
   annotations:
+    nginx.ingress.kubernetes.io/whitelist-source-range: {{ .Values.grafana.ingress.whitelistSourceRange | default "0.0.0.0/0" }}
     external-dns.alpha.kubernetes.io/hostname: {{ .Values.grafana.ingress.host | quote }}
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
