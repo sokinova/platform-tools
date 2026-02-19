@@ -1,0 +1,30 @@
+# Headless service for Elasticsearch StatefulSet pod discovery.
+# clusterIP=None means no virtual IP is assigned; DNS returns individual pod IPs directly.
+# This is required for ES nodes to discover each other via the "discovery.seed_hosts" setting.
+# publishNotReadyAddresses=true ensures new pods can be discovered before they pass readiness checks.
+{{- if .Values.elasticsearch.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.namespace.name }}-elasticsearch-headless
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app: elasticsearch
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    # HTTP REST API port
+    - name: http
+      port: {{ .Values.elasticsearch.service.httpPort }}
+      targetPort: http
+      protocol: TCP
+    # Transport port for inter-node communication
+    - name: transport
+      port: {{ .Values.elasticsearch.service.transportPort }}
+      targetPort: transport
+      protocol: TCP
+  selector:
+    app: elasticsearch
+{{- end }}
