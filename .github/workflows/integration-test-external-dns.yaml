@@ -16,7 +16,7 @@ permissions:
 
 env:
   AWS_REGION: "us-east-1"
-  CLUSTER_NAME: "temp-eks-cluster"
+  CLUSTER_NAME: "projectx_cluster_ubuntu25b"
   NAMESPACE: "external-dns"
 
 jobs:

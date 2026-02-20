@@ -8,7 +8,7 @@ image:
 serviceAccount:
   create: true
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::383585068161:role/dev-temp-eks-cluster-external-dns-irsa
+    eks.amazonaws.com/role-arn: arn:aws:iam::383585068161:role/dev-projectx_cluster_ubuntu25b-external-dns-irsa
   name: external-dns
   automountServiceAccountToken: true
 
@@ -82,7 +82,7 @@ policy: sync
 
 registry: txt 
 
-txtOwnerId: temp-eks-cluster 
+txtOwnerId: projectx_cluster_ubuntu25b
 
 txtPrefix: external-dns- 
 
