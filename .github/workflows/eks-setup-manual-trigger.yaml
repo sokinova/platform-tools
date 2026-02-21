@@ -1,56 +1,57 @@
-# # Manually triggered workflow
-# name: 'EKS Cluster Setup with CloudFormation'
+# Manually triggered workflow
+name: 'EKS Cluster Setup with CloudFormation'
 
-# on:
-#   workflow_dispatch:
-#     inputs:
-#       environment_stage:
-#         description: 'Environment Stage for Manual EKS Setup'
-#         required: true
-#         default: 'dev'
+on:
+  workflow_dispatch:
+    inputs:
+      environment_stage:
+        description: 'Environment Stage for Manual EKS Setup'
+        required: true
+        default: 'dev'
 
-# permissions:
-#     id-token: write
-#     contents: read
+permissions:
+    id-token: write
+    contents: read
           
-# env:
-#   AWS_REGION: "us-east-1"
+env:
+  AWS_REGION: "us-east-1"
 
-# jobs:
-#   setup-eks-cluster:
-#     runs-on: ubuntu-latest
-#     defaults:
-#         run:
-#           shell: bash
-#     environment: ${{ github.event.inputs.environment_stage }}
-#     steps:
-#       - uses: actions/checkout@v3
+jobs:
+  setup-eks-cluster:
+    runs-on: ubuntu-latest
+    defaults:
+        run:
+          shell: bash
+    environment: ${{ github.event.inputs.environment_stage }}
+    steps:
+      - uses: actions/checkout@v3
 
-#       - name: Configure AWS credentials
-#         uses: aws-actions/configure-aws-credentials@v4
-#         with:
-#           role-to-assume: ${{ vars.IAM_ROLE }}
-#           role-session-name: GitHubActionsRoleSession
-#           aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.IAM_ROLE }}
+          role-session-name: GitHubActionsRoleSession
+          aws-region: ${{ env.AWS_REGION }}
 
-#       # Official installation instructions from https://eksctl.io/installation/
-#       - name: Install eksctl
-#         run: |
-#           ARCH=amd64
-#           PLATFORM=$(uname -s)_$ARCH
-#           curl -sLO "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_$PLATFORM.tar.gz"
-#           tar -xzf eksctl_$PLATFORM.tar.gz -C /tmp && rm eksctl_$PLATFORM.tar.gz
-#           sudo mv /tmp/eksctl /usr/local/bin
-#           eksctl version
+      # Official installation instructions from https://eksctl.io/installation/
+      - name: Install eksctl
+        run: |
+          ARCH=amd64
+          PLATFORM=$(uname -s)_$ARCH
+          curl -sLO "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_$PLATFORM.tar.gz"
+          tar -xzf eksctl_$PLATFORM.tar.gz -C /tmp && rm eksctl_$PLATFORM.tar.gz
+          sudo mv /tmp/eksctl /usr/local/bin
+          eksctl version
 
-#       # Create EKS cluster with CloudFormation
-#       # both AWSReservedSSO_Administrator-* role and an IAM role running this job should get full access to this EKS cluster
-#       - name: Create EKS Cluster with CloudFormation
-#         run: |
-#           SSO_ADMIN_ROLE=$(aws iam list-roles --query "Roles[?starts_with(RoleName, 'AWSReservedSSO_Administrator')].RoleName" --output text)
-#           make cluster name=temporary-eks-cluster-${{ github.event.inputs.environment_stage }} version=1.34 role=$SSO_ADMIN_ROLE
-#         working-directory: ./eks-cloudformation
+      # Create EKS cluster with CloudFormation
+      # both AWSReservedSSO_Administrator-* role and an IAM role running this job should get full access to this EKS cluster
+      - name: Create EKS Cluster with CloudFormation
+        run: |
+          SSO_ADMIN_ROLE=$(aws iam list-roles --query "Roles[?starts_with(RoleName, 'AWSReservedSSO_Administrator')].RoleName" --output text)
+          make cluster name=temporary-eks-cluster-${{ github.event.inputs.environment_stage }} version=1.34 role=$SSO_ADMIN_ROLE
+        working-directory: ./eks-cloudformation
 
+<<<<<<< HEAD
 <<<<<<< HEAD
       # Login to EKS
       - name: Login to EKS - update kubeconfig
@@ -60,7 +61,12 @@
 #       - name: Login to EKS - update kubeconfig
 #         run: aws eks update-kubeconfig --name temporary-eks-cluster-${{ github.event.inputs.environment_stage }} --region $AWS_REGION
 >>>>>>> 8df4c50 (deploy external dns workflow)
+=======
+      # Login to EKS
+      - name: Login to EKS - update kubeconfig
+        run: aws eks update-kubeconfig --name temporary-eks-cluster-${{ github.event.inputs.environment_stage }} --region $AWS_REGION
+>>>>>>> 31a0b6c (run integration test after scaling)
 
-#       # Display aws-auth configmap
-#       - name: View the new IAM to Kubernetes RBAC mapping
-#         run: kubectl -n kube-system get configmap aws-auth -o yaml
+      # Display aws-auth configmap
+      - name: View the new IAM to Kubernetes RBAC mapping
+        run: kubectl -n kube-system get configmap aws-auth -o yaml

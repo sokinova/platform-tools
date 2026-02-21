@@ -1,108 +1,108 @@
-# ---
-# name: "Workflow - Perform Automated Tests for External DNS"
+---
+name: "Workflow - Perform Automated Tests for External DNS"
 
-# on:
-#   push:
-#     branches:
-#       - feature/MRP25BUBUN-9-external-dns
-#       - main
+on:
+  push:
+    branches:
+      - feature/MRP25BUBUN-9-external-dns
+      - main
 
-# permissions:
-#   id-token: write
-#   contents: read
+permissions:
+  id-token: write
+  contents: read
 
-# env:
-#   AWS_REGION: "us-east-1"
-#   CLUSTER_NAME: "projectx_cluster_ubuntu25b"
-#   NAMESPACE: "external-dns"
+env:
+  AWS_REGION: "us-east-1"
+  CLUSTER_NAME: "projectx_cluster_ubuntu25b"
+  NAMESPACE: "external-dns"
 
-# jobs:
-#   deploy-external-dns:
-#     runs-on: ubuntu-latest
+jobs:
+  deploy-external-dns:
+    runs-on: ubuntu-latest
 
-#     defaults:
-#       run:
-#         shell: bash
+    defaults:
+      run:
+        shell: bash
 
-#     environment: dev
+    environment: dev
 
-#     steps:
-#       - uses: actions/checkout@v3
+    steps:
+      - uses: actions/checkout@v3
 
-#       - name: Configure AWS credentials
-#         uses: aws-actions/configure-aws-credentials@v4
-#         with:
-#           role-to-assume: ${{ vars.IAM_ROLE }}
-#           role-session-name: GitHubActionsRoleSession
-#           aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.IAM_ROLE }}
+          role-session-name: GitHubActionsRoleSession
+          aws-region: ${{ env.AWS_REGION }}
 
-#       - name: Login to EKS - update kubeconfig
-#         run: >
-#           aws eks update-kubeconfig
-#           --name $CLUSTER_NAME
-#           --region $AWS_REGION
+      - name: Login to EKS - update kubeconfig
+        run: >
+          aws eks update-kubeconfig
+          --name $CLUSTER_NAME
+          --region $AWS_REGION
 
-#       - name: Install tooling for tests
-#         run: |
-#           sudo apt-get update
-#           sudo apt-get install -y dnsutils curl
+      - name: Install tooling for tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dnsutils curl
 
-#       - name: Verify external-dns rollout
-#         run: |
-#           kubectl rollout status deployment/external-dns -n "$NAMESPACE" --timeout=180s
-#           kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/name=external-dns
+      - name: Verify external-dns rollout
+        run: |
+          kubectl rollout status deployment/external-dns -n "$NAMESPACE" --timeout=180s
+          kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/name=external-dns
 
-#       - name: Deploy deployment, service, and ingress
-#         env:
-#           TEST_NS: external-dns-test
-#         run: |
-#           kubectl get ns "$TEST_NS" >/dev/null 2>&1 || kubectl create ns "$TEST_NS"
-#           kubectl apply -n "$TEST_NS" -f external-dns/integration-tests/dns-test-deploy.yaml 
-#           kubectl apply -n "$TEST_NS" -f external-dns/integration-tests/dns-test-ingress.yaml
-#           kubectl rollout status deploy/dns-test -n "$TEST_NS" --timeout=180s
+      - name: Deploy deployment, service, and ingress
+        env:
+          TEST_NS: external-dns-test
+        run: |
+          kubectl get ns "$TEST_NS" >/dev/null 2>&1 || kubectl create ns "$TEST_NS"
+          kubectl apply -n "$TEST_NS" -f external-dns/integration-tests/dns-test-deploy.yaml 
+          kubectl apply -n "$TEST_NS" -f external-dns/integration-tests/dns-test-ingress.yaml
+          kubectl rollout status deploy/dns-test -n "$TEST_NS" --timeout=180s
 
-#       - name: Wait for DNS record + verify nslookup + curl
-#         env:
-#           TEST_FQDN: dns-test.312ubuntu.com
-#           TEST_NS: external-dns-test
-#         run: |
-#           set -eu
+      - name: Wait for DNS record + verify nslookup + curl
+        env:
+          TEST_FQDN: dns-test.312ubuntu.com
+          TEST_NS: external-dns-test
+        run: |
+          set -eu
 
-#           echo "Waiting for DNS: $TEST_FQDN"
-#           for i in {1..60}; do
-#             nslookup "$TEST_FQDN" >/dev/null 2>&1 && break
-#             echo "Not ready ($i/60)..."
-#             sleep 10
-#           done
+          echo "Waiting for DNS: $TEST_FQDN"
+          for i in {1..60}; do
+            nslookup "$TEST_FQDN" >/dev/null 2>&1 && break
+            echo "Not ready ($i/60)..."
+            sleep 10
+          done
 
-#           if ! nslookup "$TEST_FQDN" >/dev/null 2>&1; then
-#             echo "DNS FAILED"
-#             echo "---- Ingress Status ----"
-#             kubectl get ingress -n "$TEST_NS" dns-test -o wide || true
-#             echo "---- ExternalDNS Logs ----"
-#             kubectl logs -n external-dns deploy/external-dns --tail=80 || true
-#             exit 1
-#           fi
+          if ! nslookup "$TEST_FQDN" >/dev/null 2>&1; then
+            echo "DNS FAILED"
+            echo "---- Ingress Status ----"
+            kubectl get ingress -n "$TEST_NS" dns-test -o wide || true
+            echo "---- ExternalDNS Logs ----"
+            kubectl logs -n external-dns deploy/external-dns --tail=80 || true
+            exit 1
+          fi
 
-#           echo "DNS OK"
+          echo "DNS OK"
 
-#           echo "Checking HTTP"
-#           if ! curl -fsS "http://$TEST_FQDN" >/dev/null; then
-#             echo "HTTP FAILED"
-#             echo "---- Ingress Status ----"
-#             kubectl get ingress -n "$TEST_NS" dns-test -o wide || true
-#             echo "---- ExternalDNS Logs ----"
-#             kubectl logs -n external-dns deploy/external-dns --tail=80 || true
-#             exit 1
-#           fi
+          echo "Checking HTTP"
+          if ! curl -fsS "http://$TEST_FQDN" >/dev/null; then
+            echo "HTTP FAILED"
+            echo "---- Ingress Status ----"
+            kubectl get ingress -n "$TEST_NS" dns-test -o wide || true
+            echo "---- ExternalDNS Logs ----"
+            kubectl logs -n external-dns deploy/external-dns --tail=80 || true
+            exit 1
+          fi
 
-#           echo "HTTP OK"
+          echo "HTTP OK"
 
-#       - name: Cleanup sample resources
-#         if: always()
-#         env:
-#           TEST_NS: external-dns-test
-#         run: |
-#           kubectl delete -n "$TEST_NS" -f external-dns/integration-tests/dns-test-ingress.yaml --ignore-not-found=true
-#           kubectl delete -n "$TEST_NS" -f external-dns/integration-tests/dns-test-deploy.yaml --ignore-not-found=true
-#           kubectl delete ns "$TEST_NS" --ignore-not-found=true
+      - name: Cleanup sample resources
+        if: always()
+        env:
+          TEST_NS: external-dns-test
+        run: |
+          kubectl delete -n "$TEST_NS" -f external-dns/integration-tests/dns-test-ingress.yaml --ignore-not-found=true
+          kubectl delete -n "$TEST_NS" -f external-dns/integration-tests/dns-test-deploy.yaml --ignore-not-found=true
+          kubectl delete ns "$TEST_NS" --ignore-not-found=true
