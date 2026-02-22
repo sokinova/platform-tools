@@ -20,7 +20,6 @@ spec:
         app: prometheus
     spec:
       serviceAccountName: prometheus
-      serviceName: prometheus-headless
       terminationGracePeriodSeconds: 60
       containers:
         - name: prometheus
