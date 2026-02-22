@@ -7,9 +7,13 @@ namespace:
   name: eks-monitoring-dev
 
 prometheus:
+  useStatefulSet: true
   enabled: true
   image: prom/prometheus:v2.52.0
   replicas: 1
+  persistence:
+    size: 10Gi
+    storageClass: gp3
 
   service:
     type: ClusterIP
@@ -25,4 +29,6 @@ kubeStateMetrics:
 nodeExporter:
   enabled: true
   image: prom/node-exporter:v1.8.1
+
+
 
