@@ -45,16 +45,16 @@ Grafana is exposed securely through an Ingress controller with TLS enabled, ensu
 ## How to Run/Execute
 deploy Prometheus: 
 ```bash
-helm upgrade --install eks-monitoring ./helm \
-  -n eks-monitoring-dev --create-namespace \
-  -f ./helm/values/dev-values.yaml
+helm upgrade --install eks-monitoring-prometheus ./eks-monitoring/helm-prometheus \
+  -n eks-monitoring-dev \
+  -f ./eks-monitoring/helm-prometheus/values/dev-values.yaml
 ```
 
 deploy Grafana:
 ```bash
-helm upgrade --install eks-monitoring-grafana ./helm-grafana \
+helm upgrade --install eks-monitoring-grafana ./eks-monitoring/helm-grafana \
   -n eks-monitoring-dev --create-namespace \
-  -f ./helm-grafana/values/dev-values.yaml
+  -f ./eks-monitoring/helm-grafana/values/dev-values.yaml
 ```
 
 validate and check running pods:
@@ -63,7 +63,7 @@ kubectl get pods -n eks-monitoring
 ```
 to get acsses to prometheus ui:
 ```bash
-kubectl -n eks-monitoring-dev port-forward svc/eks-monitoring-prometheus 9090:9090
+kubectl -n eks-monitoring-dev port-forward svc/eks-monitoring-dev-prometheus 9090:9090
 ```
 then open http://localhost:9090
 

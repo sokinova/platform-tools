@@ -13,7 +13,7 @@ prometheus:
   replicas: 1
   persistence:
     size: 10Gi
-    storageClass: gp3
+    storageClass: gp2
 
   service:
     type: ClusterIP
