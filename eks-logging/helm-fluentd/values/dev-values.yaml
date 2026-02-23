@@ -16,9 +16,9 @@ fluentd:
       host: "logging-elasticsearch"
       port: 9200
 
-    # S3 backup bucket for the dev environment
+    # S3 backup disabled — API request costs ($74/mo) outweigh backup value for dev
     s3:
-      bucket: eks-logs-312ubuntu-dev
+      bucket: ""
 
   # Cluster name — injected into every log record for identification
   clusterName: projectx_cluster_ubuntu25b
