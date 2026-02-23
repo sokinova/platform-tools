@@ -53,7 +53,7 @@ jobs:
 
       # Login to EKS
       - name: Login to EKS - update kubeconfig
-        run: aws eks update-kubeconfig --name temporary-eks-cluster-${{ github.event.inputs.environment_stage }} --region $AWS_REGION
+        run: aws eks update-kubeconfig --name temp-eks-cluster-${{ github.event.inputs.environment_stage }} --region $AWS_REGION
 
       # Display aws-auth configmap
       - name: View the new IAM to Kubernetes RBAC mapping

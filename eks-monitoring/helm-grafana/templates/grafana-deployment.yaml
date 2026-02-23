@@ -1,0 +1,50 @@
+{{- if .Values.grafana.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: {{ .Values.namespace.name }}
+spec:
+  replicas: {{ .Values.grafana.replicas }}
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      serviceAccountName: {{ default "grafana" .Values.grafana.serviceAccountName }}
+      containers:
+        - name: grafana
+          image: {{ .Values.grafana.image }}
+          ports:
+            - containerPort: 3000
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              export GF_SECURITY_ADMIN_USER="$(cat /mnt/secrets-store/admin-user)"
+              export GF_SECURITY_ADMIN_PASSWORD="$(cat /mnt/secrets-store/admin-password)"
+              exec /run.sh
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            {{- if .Values.secretsManager.enabled }}
+            - name: secrets-store-inline
+              mountPath: /mnt/secrets-store
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        {{- if .Values.secretsManager.enabled }}
+        - name: secrets-store-inline
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ .Values.secretsManager.name | quote }}
+        {{- end }}
+{{- end }}
+       

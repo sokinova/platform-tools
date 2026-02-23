@@ -163,6 +163,7 @@ jobs:
       # Create aws eks access entry
       - name: Ensure EKS Access Entry
         run: |
+
             set -e  # exit on any error
 
             ROLE_ARN="arn:aws:iam::383585068161:role/DeveloperProdAccessRole-ubuntu25b"
@@ -191,10 +192,19 @@ jobs:
         run: |
           aws eks list-access-entries \
             --cluster-name $CLUSTER_NAME
-
-      - name: Finalize Deployment
+      
+      # Deploying Prometheus and Grafana monitoring setup     
+      - name: Deploy Prometheus (dev)
         run: |
-            echo "Final deployment steps and cleanup"
+          helm upgrade --install eks-monitoring-prometheus ./eks-monitoring/helm-prometheus \
+            -n eks-monitoring-dev --create-namespace \
+            -f ./eks-monitoring/helm-prometheus/values/dev-values.yaml
+
+      - name: Deploy Grafana (dev)
+        run: |
+          helm upgrade --install eks-monitoring-grafana ./eks-monitoring/helm-grafana \
+            -n eks-monitoring-dev --create-namespace \
+            -f ./eks-monitoring/helm-grafana/values/dev-values.yaml
 
       - name: Deploy Secrets Store CSI Driver
         run: |

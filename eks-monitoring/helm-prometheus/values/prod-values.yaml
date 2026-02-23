@@ -1,0 +1,31 @@
+global:
+  team: ubuntu
+  environment: prod
+
+namespace:
+  create: true
+  name: eks-monitoring-prod
+
+prometheus:
+  useStatefulSet: true
+  enabled: true
+  image: prom/prometheus:v2.52.0
+  replicas: 1
+  persistence:
+    size: 10Gi
+    storageClass: gp2
+
+  service:
+    type: ClusterIP
+    port: 9090
+
+  resources: {}
+
+kubeStateMetrics:
+  enabled: true
+  image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.12.0
+  replicas: 1
+  
+nodeExporter:
+  enabled: true
+  image: prom/node-exporter:v1.8.1
