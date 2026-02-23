@@ -1,0 +1,31 @@
+# Staging environment values for Kibana.
+# Single replica with security on and TLS ingress.
+# Used for pre-production validation with production-like security.
+
+global:
+  environment: staging
+
+# Elasticsearch service name — same across all environments
+elasticsearch:
+  host: "logging-elasticsearch"
+  port: 9200
+
+kibana:
+  # Single replica is sufficient for staging
+  replicas: 1
+
+  # Xpack security enabled — must match the staging ES cluster's security settings
+  security:
+    enabled: true
+
+  ingress:
+    enabled: true
+    # Staging Kibana URL
+    host: kibana-ubuntu-staging.312ubuntu.com
+    # TLS enabled — requires cert-manager with letsencrypt-prod cluster issuer
+    tls:
+      enabled: true
+      secretName: kibana-tls-staging
+    sslRedirect: "true"
+    # IP whitelist — same team IP
+    whitelistSourceRange: "73.45.178.26/32"

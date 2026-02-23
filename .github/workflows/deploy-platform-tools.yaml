@@ -1,5 +1,19 @@
-# This worflow is primarily for platform/devops tools that need to be deployed into K8s cluster
-# or tools that don't belong to Terraform
+# ============================================================
+# Platform Tools Deployment Workflow
+# ============================================================
+# Deploys platform tools (ingress-nginx, EFK logging stack, RBAC, Karpenter, etc.)
+# to the EKS cluster. Triggers on push to main or feature branches.
+#
+# EFK deployment order:
+#   1. IRSA setup — IAM role for FluentD S3 access
+#   2. ECR build  — Custom FluentD image with ES8 + S3 plugins
+#   3. Elasticsearch — First (creates namespace, provides the search backend)
+#   4. Kibana — Second (connects to ES for log visualization)
+#   5. FluentD — Third (collects logs from all nodes, sends to ES + S3)
+#   6. Auth secret — Kibana basic-auth credentials
+#   7. Verify + integration tests
+# ============================================================
+
 name: 'Workflow - Deploy Platform Tools'
 
 on:
@@ -8,13 +22,16 @@ on:
       - feature/**
       - main
 
+# OIDC permissions for AWS authentication (no stored access keys)
 permissions:
   id-token: write
   contents: read
 
+# Environment variables shared across all steps
 env:
   AWS_REGION: "us-east-1"
   ENVIRONMENT_STAGE: "dev"
+  CLUSTER_NAME: "projectx_cluster_ubuntu25b"
 
 jobs:
   deploy-platform-tools:
@@ -27,6 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # Authenticate with AWS using OIDC (GitHub Actions role)
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -34,24 +52,148 @@ jobs:
           role-session-name: GitHubActionsRoleSession
           aws-region: ${{ env.AWS_REGION }}
 
-      # Login to EKS, make sure to switch to the permanent cluster created with terraform once it's up
+      # Install Helm
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.13.0'
+
+      #Install AWS CLI
+      - name: Ensure AWS CLI is installed
+        run: |
+            if ! command -v aws &> /dev/null
+            then
+              echo "AWS CLI not found. Installing..."
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              unzip -q awscliv2.zip
+              sudo ./aws/install
+            else
+              echo "AWS CLI already installed"
+            fi
+
+      # Connect kubectl to the EKS cluster
       - name: Login to EKS - update kubeconfig
-        run: aws eks update-kubeconfig --name projectx_cluster_ubuntu25b --region $AWS_REGION
+        run: aws eks update-kubeconfig --name $CLUSTER_NAME --region $AWS_REGION
 
-      # Add deployment steps for each tool below
+      # Deploy the nginx ingress controller (required before any Ingress resources)
       - name: Deploy ingress-nginx controller
-        run: kubectl apply -f ingress-nginx/deploy.yaml
+        run: |
+            if kubectl -n ingress-nginx get deploy ingress-nginx-controller >/dev/null 2>&1; then
+              echo "✅ ingress-nginx already installed. Skipping."
+            else
+              echo "⚠️ ingress-nginx not found. Deploying..."
+              kubectl apply -f ingress-nginx/deploy.yaml
+            fi
 
-      # Example for a tool like Karpenter
+      # --- EFK Logging Stack ---
+
+      # Create the IAM role and trust policy for FluentD's S3 access via IRSA
+      - name: Setup IRSA for FluentD
+        run: ./eks-logging/iam/irsa-setup.sh ${ENVIRONMENT_STAGE}
+
+      # Build the custom FluentD Docker image (with ES8 + S3 plugins) and push to ECR
+      - name: Login to ECR and build FluentD image
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/fluentd-es-s3"
+          aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com" || true
+          aws ecr describe-repositories --repository-names fluentd-es-s3 --region ${AWS_REGION} 2>/dev/null || \
+            aws ecr create-repository --repository-name fluentd-es-s3 --image-scanning-configuration scanOnPush=true --region ${AWS_REGION}
+          docker build -t "${ECR_REPO}:v1.16-es8-s3" -f eks-logging/docker/fluentd/Dockerfile .
+          docker push "${ECR_REPO}:v1.16-es8-s3"
+
+      # Deploy Elasticsearch first — it creates the logging namespace and provides the
+      # search backend that Kibana and FluentD depend on
+      - name: Deploy Elasticsearch
+        run: |
+          helm upgrade --install elasticsearch-${ENVIRONMENT_STAGE} ./eks-logging/helm-elasticsearch \
+            --namespace logging --create-namespace \
+            --values ./eks-logging/helm-elasticsearch/values/${ENVIRONMENT_STAGE}-values.yaml \
+            --wait --timeout 10m
+
+      # Deploy Kibana — connects to ES using the explicit "logging-elasticsearch" service name
+      - name: Deploy Kibana
+        run: |
+          helm upgrade --install kibana-${ENVIRONMENT_STAGE} ./eks-logging/helm-kibana \
+            --namespace logging \
+            --values ./eks-logging/helm-kibana/values/${ENVIRONMENT_STAGE}-values.yaml \
+            --wait --timeout 5m
+
+      # Deploy FluentD — pass AWS account ID at install time for IRSA annotation
+      # and ECR image URL computation in the DaemonSet template
+      - name: Deploy FluentD
+        run: |
+          AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          helm upgrade --install fluentd-${ENVIRONMENT_STAGE} ./eks-logging/helm-fluentd \
+            --namespace logging \
+            --values ./eks-logging/helm-fluentd/values/${ENVIRONMENT_STAGE}-values.yaml \
+            --set aws.accountId=${AWS_ACCOUNT_ID} \
+            --wait --timeout 5m
+
+      # Create the Kibana basic-auth K8s secret (credentials from SecretsManager)
+      - name: Create Kibana auth secret
+        run: ./eks-logging/scripts/create-kibana-secret.sh ${ENVIRONMENT_STAGE}
+
+      # Verify all EFK components are deployed and running
+      - name: Verify EFK deployment
+        run: |
+          kubectl get pods -n logging
+          kubectl get svc -n logging
+          kubectl get ingress -n logging
+
+      # Run integration tests — checks ES health, pod status, log flow, S3 writes
+      - name: Run EFK integration tests
+        run: ./eks-logging/scripts/test-logging.sh ${ENVIRONMENT_STAGE}
+
+      # Placeholder for Karpenter deployment (separate ticket)
       - name: Deploy Karpenter
         run: |
             echo "Deploy Karpenter steps go here"
 
-      # Example for a tool like EKS Logging
-      - name: Deploy EKS Logging
+      # --- RBAC and Cluster Roles ---
+
+      # Create Cluster role and RBAC
+      - name: Deploy Cluster role and RBAC
         run: |
-            echo "Deploy EKS Logging steps go here"
-       # Deploying Prometheus and Grafana monitoring setup     
+            helm upgrade --install read-access k8s-user-roles/ReadAccessClusterRole \
+            -f k8s-user-roles/ReadAccessClusterRole/values-${ENVIRONMENT_STAGE}.yaml \
+            --namespace helm-system \
+            --create-namespace
+
+      # Create aws eks access entry
+      - name: Ensure EKS Access Entry
+        run: |
+
+            set -e  # exit on any error
+
+            ROLE_ARN="arn:aws:iam::383585068161:role/DeveloperProdAccessRole-ubuntu25b"
+
+            if ! aws eks describe-access-entry \
+                --cluster-name "$CLUSTER_NAME" \
+                --principal-arn "$ROLE_ARN" >/dev/null 2>&1; then
+              echo "Access entry not found. Creating..."
+              aws eks create-access-entry \
+                --cluster-name "$CLUSTER_NAME" \
+                --principal-arn "$ROLE_ARN" \
+                --type STANDARD \
+                --kubernetes-groups dev-team \
+                --username DeveloperProdAccessRole
+            else
+              echo "Access entry exists. Updating..."
+              aws eks update-access-entry \
+                --cluster-name "$CLUSTER_NAME" \
+                --principal-arn "$ROLE_ARN" \
+                --kubernetes-groups dev-team \
+                --username DeveloperProdAccessRole
+            fi
+
+      # Verify Access Entry
+      - name: Verify Access Entry
+        run: |
+          aws eks list-access-entries \
+            --cluster-name $CLUSTER_NAME
+      
+      # Deploying Prometheus and Grafana monitoring setup     
       - name: Deploy Prometheus (dev)
         run: |
           helm upgrade --install eks-monitoring-prometheus ./eks-monitoring/helm-prometheus \
@@ -64,12 +206,45 @@ jobs:
             -n eks-monitoring-dev --create-namespace \
             -f ./eks-monitoring/helm-grafana/values/dev-values.yaml
 
-
-      # Repeat for each additional tool...
-      # Example: Deploy External DNS
-      # Example: Setup K8s User Roles
-
-      - name: Finalize Deployment
+      - name: Deploy Secrets Store CSI Driver
         run: |
-            echo "Final deployment steps and cleanup"
+            if kubectl -n kube-system get ds csi-secrets-store-secrets-store-csi-driver >/dev/null 2>&1; then
+              echo "✅ Secrets Store CSI Driver already installed. Skipping."
+            else
+              echo "⚠️ CSI Driver not found. Installing via Helm..."
+              helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+              helm repo update
+
+              helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
+              -n kube-system \
+              --set syncSecret.enabled=true
+
+              echo "⏳ Waiting for CSI driver daemonset rollout..."
+              kubectl -n kube-system rollout status ds/csi-secrets-store-secrets-store-csi-driver --timeout=10m
+            fi
+
+      - name: Deploy AWS provider for Secrets Store CSI
+        run: |
+            if kubectl -n kube-system get ds csi-secrets-store-provider-aws >/dev/null 2>&1; then
+              echo "✅ AWS provider already installed. Skipping."
+            else
+              echo "⚠️ AWS provider not found. Installing..."
+              kubectl apply -f https://raw.githubusercontent.com/aws/secrets-store-csi-driver-provider-aws/main/deployment/aws-provider-installer.yaml
+
+              echo "⏳ Waiting for AWS provider daemonset rollout..."
+              kubectl -n kube-system rollout status ds/csi-secrets-store-provider-aws --timeout=10m 
+            fi
+
+      - name: Bootstrap TLS
+        env:
+          CLUSTERISSUER_NAME: letsencrypt-prod-dns
+          HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
+          CERT_MANAGER_ROUTE53_ROLE_ARN: ${{ vars.CERT_MANAGER_ROUTE53_ROLE_ARN }}
+          CLUSTER_ISSUER_MANIFEST: tls-bootstrap/clusterissuer.yaml
+          WILDCARD_CERT_MANIFEST: tls-bootstrap/wildcard-cert.yaml
+          WILDCARD_SECRET_NS: ingress-nginx
+          WILDCARD_SECRET_NAME: wildcard-312ubuntu-tls
+          WILDCARD_CERT_NAME: wildcard-312ubuntu-tls
+        run: ./tls-bootstrap/bootstrap-tls.sh
+
 

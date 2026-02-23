@@ -1,0 +1,50 @@
+# Elasticsearch configuration file (elasticsearch.yml) rendered as a ConfigMap.
+# Mounted into the ES container at /usr/share/elasticsearch/config/elasticsearch.yml.
+# Controls cluster discovery, networking, and security settings.
+{{- if .Values.elasticsearch.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.namespace.name }}-elasticsearch-config
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    app: elasticsearch
+data:
+  elasticsearch.yml: |
+    # Cluster identity — used by all nodes to join the same cluster
+    cluster.name: {{ .Values.elasticsearch.clusterName }}
+
+    # Listen on all interfaces so the K8s service can route traffic to the pod
+    network.host: 0.0.0.0
+
+    # Seed hosts point to the headless service for StatefulSet pod discovery
+    discovery.seed_hosts:
+      - {{ .Values.namespace.name }}-elasticsearch-headless
+
+    # Initial master nodes — list all StatefulSet pod names for first-time cluster bootstrap
+    # Uses a range loop to generate pod names like logging-elasticsearch-0, logging-elasticsearch-1, etc.
+    cluster.initial_master_nodes:
+      {{- $namespaceName := .Values.namespace.name }}
+      {{- $replicas := int .Values.elasticsearch.replicas }}
+      {{- range $i := until $replicas }}
+      - {{ $namespaceName }}-elasticsearch-{{ $i }}
+      {{- end }}
+
+    # Xpack security — conditionally enabled per environment
+    # Dev: disabled for simplicity. Staging: enabled. Prod: enabled + transport SSL.
+    # NOTE: Kibana 8.x does not recognize "xpack.security.enabled: false" as a key,
+    # so we only set it when security is ON. When off, we explicitly set it to false
+    # here in ES (ES does support the key, unlike Kibana).
+    {{- if .Values.elasticsearch.security.enabled }}
+    xpack.security.enabled: true
+    {{- if .Values.elasticsearch.security.transportSsl }}
+    # Transport SSL encrypts inter-node communication (required for prod)
+    xpack.security.transport.ssl.enabled: true
+    xpack.security.transport.ssl.verification_mode: certificate
+    {{- else }}
+    xpack.security.transport.ssl.enabled: false
+    {{- end }}
+    {{- else }}
+    xpack.security.enabled: false
+    {{- end }}
+{{- end }}

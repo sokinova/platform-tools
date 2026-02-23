@@ -1,0 +1,24 @@
+# Helm chart metadata for the Kibana component of the EFK logging stack.
+# Kibana provides a web UI for searching and visualizing logs stored in Elasticsearch.
+# This chart deploys Kibana as a Deployment with an nginx Ingress for external access.
+# Depends on Elasticsearch being deployed first (connects via explicit host/port values).
+#
+# Usage:
+#   helm upgrade --install kibana-dev ./eks-logging/helm-kibana \
+#     --namespace logging \
+#     --values ./eks-logging/helm-kibana/values/dev-values.yaml \
+#     --wait --timeout 5m
+
+apiVersion: v2
+name: helm-kibana
+description: Kibana dashboard for Elasticsearch on Amazon EKS
+type: application
+version: 1.0.0
+appVersion: "8.5.1"
+keywords:
+  - logging
+  - kibana
+  - efk
+  - eks
+maintainers:
+  - name: ubuntu-team
