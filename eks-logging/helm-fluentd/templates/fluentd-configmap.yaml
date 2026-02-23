@@ -175,19 +175,25 @@ data:
           s3_bucket {{ .Values.fluentd.output.s3.bucket }}
           s3_region {{ .Values.fluentd.output.s3.region }}
           path {{ .Values.fluentd.output.s3.path }}
-          s3_object_key_format %{path}%{index}.%{file_extension}
+          # Use time-based keys with UUID to generate unique object names.
+          # IMPORTANT: Do NOT use %{index} — it causes sequential HeadObject
+          # calls to find the next available number, generating millions of
+          # S3 API requests and significant cost.
+          s3_object_key_format %{path}%{time_slice}/%{uuid_flush}.%{file_extension}
           # Compress logs with gzip to reduce S3 storage costs
           store_as gzip
+          # Skip bucket existence check on startup (avoids unnecessary HEAD request)
+          check_bucket false
           # Server-side encryption for data at rest
           {{- if .Values.fluentd.output.s3.encryption }}
           use_server_side_encryption {{ .Values.fluentd.output.s3.encryption }}
           {{- end }}
-          <buffer>
+          <buffer time>
             @type {{ .Values.fluentd.output.s3.buffer.type }}
             path {{ .Values.fluentd.output.s3.buffer.path }}
-            flush_mode interval
-            # Flush to S3 every 60 seconds
-            flush_interval 60s
+            # Time-based chunking: partition logs into hourly directories
+            timekey {{ .Values.fluentd.output.s3.buffer.timekey }}
+            timekey_wait {{ .Values.fluentd.output.s3.buffer.timekeyWait }}
             retry_type exponential_backoff
             retry_forever false
             retry_max_interval 30
