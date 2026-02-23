@@ -229,6 +229,82 @@ The chart code and all environment values files are ready. The following infrast
 | cert-manager | Not yet | Required for TLS ingress (letsencrypt-prod issuer) |
 | GHA multi-env workflow | Not yet | Current workflow only targets dev |
 
+## Incident: S3 API Request Cost Spike ($74.51) — Root Cause Analysis
+
+### Summary
+
+In February 2026, AWS Cost Explorer showed a sudden spike to **$74.51/month** in S3 costs for the `eks-logs-312ubuntu-dev` bucket. The cost was not from storage — it was entirely from **S3 API request charges** (Requests-Tier1 and Requests-Tier2). CloudTrail investigation traced the issue to the FluentD S3 output plugin configuration.
+
+### Symptoms
+
+- **Cost Explorer** showed $74.51 total S3 cost (average monthly was $5.32), with usage type filtered to `Requests-Tier1` and `Requests-Tier2` only
+- **Usage graph** showed ~200M+ S3 requests in February 2026, compared to near-zero in prior months
+- All costs were in `us-east-1`, service: `S3 (Simple Storage Service)`
+
+### Root Cause
+
+The FluentD S3 output plugin was configured with a **sequential index-based key format**:
+
+```
+s3_object_key_format %{path}%{index}.%{file_extension}
+```
+
+This produced S3 keys like `logs/0.gz`, `logs/1.gz`, ..., `logs/19688.gz`. The `%{index}` placeholder causes `fluent-plugin-s3` to perform a **sequential HeadObject scan** — it calls `HEAD` on every key starting from 0 until it finds an unused index number. As objects accumulated, the scan grew linearly.
+
+**CloudTrail evidence** (6 log files from a 7-minute window on 2026-02-23):
+
+| Metric | Value |
+|--------|-------|
+| Total HeadObject calls (7 min) | 14,407 |
+| Total PutObject calls (actual writes) | 1 |
+| Read-to-write ratio | 14,407 : 1 |
+| Key pattern | 100% sequential `logs/N.gz` (N = 8 to 19,688) |
+| Fluentd pods scanning simultaneously | 4 (each scanning the full range independently) |
+| Extrapolated monthly requests | ~41,000,000 |
+| IAM role | `fluentd-s3-dev` (EKS OIDC federation) |
+| Source IPs | 4 distinct EKS node IPs in us-east-1 |
+
+All 4 FluentD DaemonSet pods independently scanned the same full index range (`logs/8.gz` through `logs/19688.gz`) on every flush cycle, because the key format had no per-pod partition. This produced **O(existing_objects * pods)** HEAD requests per write — a cost that grows worse over time as more objects exist.
+
+### Solution
+
+Changed the S3 output configuration in `helm-fluentd/templates/fluentd-configmap.yaml`:
+
+| Setting | Before (broken) | After (fixed) |
+|---------|-----------------|---------------|
+| `s3_object_key_format` | `%{path}%{index}.%{file_extension}` | `%{path}%{time_slice}/%{uuid_flush}.%{file_extension}` |
+| `check_bucket` | not set (defaults to true) | `false` |
+| Buffer mode | `flush_mode interval` / `flush_interval 60s` | `timekey 3600` / `timekey_wait 10m` |
+| Buffer tag | `<buffer>` | `<buffer time>` |
+
+**Why this fixes the issue:**
+- `%{uuid_flush}` generates a globally unique key per flush — no existence check needed, zero HeadObject calls
+- `%{time_slice}` partitions logs into hourly directories (e.g., `logs/2026022314/`) — better for lifecycle policies and Athena queries
+- `check_bucket false` skips the startup bucket existence HEAD request
+- `<buffer time>` with `timekey` enables time-based chunking required by `%{time_slice}`
+
+**S3 path structure change:**
+```
+Before: logs/0.gz, logs/1.gz, ..., logs/19688.gz    (flat, sequential)
+After:  logs/2026022314/a1b2c3d4.gz                  (hourly partitions, UUID keys)
+```
+
+**Estimated cost impact:**
+| | Before | After |
+|--|--------|-------|
+| HeadObject calls per write | ~19,000 (growing) | 0 |
+| Monthly API requests | ~41,000,000 | ~43,200 (1 PUT per flush, hourly per pod) |
+| Monthly S3 API cost | $74.51 | < $0.05 |
+
+### Lessons Learned
+
+1. **Never use `%{index}` in `fluent-plugin-s3`** — it has O(n) HEAD cost per write that grows with object count
+2. **S3 API request costs can exceed storage costs** — even a dev bucket with minimal data can generate $70+/month from request volume alone
+3. **Monitor CloudTrail data events** — `HeadObject` storms are invisible in standard metrics but obvious in CloudTrail
+4. **Time-based keys with UUIDs are the correct pattern** for high-throughput log shipping to S3
+
+---
+
 ## Troubleshooting
 
 ```bash
@@ -268,6 +344,7 @@ helm list -n logging
 | Kibana FATAL on startup | `xpack.security.enabled: false` set in Kibana config | Remove that key — Kibana 8.x does not recognize it |
 | ingress-nginx webhook blocking install | Controller pods are down | `kubectl delete validatingwebhookconfiguration ingress-nginx-admission` |
 | `%!s(int64=...)` in IRSA annotation | `aws.accountId` rendered as int, not string | Template uses `toString` — pass as `--set aws.accountId=<value>` |
+| High S3 API request costs ($70+/month) | `s3_object_key_format` uses `%{index}` — causes O(n) HeadObject scan | Use `%{time_slice}/%{uuid_flush}` instead. See [Incident: S3 API Request Cost Spike](#incident-s3-api-request-cost-spike-7451--root-cause-analysis) |
 
 ## Cleanup
 
