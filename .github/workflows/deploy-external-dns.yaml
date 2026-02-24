@@ -14,7 +14,7 @@ permissions:
 env:
   AWS_REGION: "us-east-1"
   CLUSTER_NAME: "projectx_cluster_ubuntu25b"
-  NAMESPACE: "external-dns"
+  NAMESPACE: "external-dns" # must be changed to external-dns-dev after the corrections in the Terraform repo
 
 jobs:
   deploy-external-dns:
@@ -60,6 +60,3 @@ jobs:
           kubectl rollout status deploy/external-dns \
             -n $NAMESPACE \
             --timeout=180s
-
-
-#helm lint ./external-dns/external-dns-helm - command to validate the workflow

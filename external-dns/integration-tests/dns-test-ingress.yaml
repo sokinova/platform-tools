@@ -4,12 +4,10 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: dns-test
-  annotations:
-    external-dns.alpha.kubernetes.io/hostname: dns-test.312ubuntu.com
 spec:
   ingressClassName: nginx
   rules:
-    - host: dev.dns-test.312ubuntu.com
+    - host: dns-test.312ubuntu.com # change to dns-test.dev.312ubuntu.com
       http:
         paths:
           - path: /
