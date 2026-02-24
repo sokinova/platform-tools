@@ -163,7 +163,6 @@ jobs:
       # Create aws eks access entry
       - name: Ensure EKS Access Entry
         run: |
-<<<<<<< HEAD
 
             set -e  # exit on any error
 
@@ -236,70 +235,6 @@ jobs:
               kubectl -n kube-system rollout status ds/csi-secrets-store-provider-aws --timeout=10m 
             fi
 
-=======
-            set -e  # exit on any error
-
-            ROLE_ARN="arn:aws:iam::383585068161:role/DeveloperProdAccessRole-ubuntu25b"
-
-            if ! aws eks describe-access-entry \
-                --cluster-name "$CLUSTER_NAME" \
-                --principal-arn "$ROLE_ARN" >/dev/null 2>&1; then
-              echo "Access entry not found. Creating..."
-              aws eks create-access-entry \
-                --cluster-name "$CLUSTER_NAME" \
-                --principal-arn "$ROLE_ARN" \
-                --type STANDARD \
-                --kubernetes-groups dev-team \
-                --username DeveloperProdAccessRole
-            else
-              echo "Access entry exists. Updating..."
-              aws eks update-access-entry \
-                --cluster-name "$CLUSTER_NAME" \
-                --principal-arn "$ROLE_ARN" \
-                --kubernetes-groups dev-team \
-                --username DeveloperProdAccessRole
-            fi
-
-      # Verify Access Entry
-      - name: Verify Access Entry
-        run: |
-          aws eks list-access-entries \
-            --cluster-name $CLUSTER_NAME
-
-      - name: Finalize Deployment
-        run: |
-            echo "Final deployment steps and cleanup"
-
-      - name: Deploy Secrets Store CSI Driver
-        run: |
-            if kubectl -n kube-system get ds csi-secrets-store-secrets-store-csi-driver >/dev/null 2>&1; then
-              echo "✅ Secrets Store CSI Driver already installed. Skipping."
-            else
-              echo "⚠️ CSI Driver not found. Installing via Helm..."
-              helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
-              helm repo update
-
-              helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
-              -n kube-system \
-              --set syncSecret.enabled=true
-
-              echo "⏳ Waiting for CSI driver daemonset rollout..."
-              kubectl -n kube-system rollout status ds/csi-secrets-store-secrets-store-csi-driver --timeout=10m
-            fi
-
-      - name: Deploy AWS provider for Secrets Store CSI
-        run: |
-            if kubectl -n kube-system get ds csi-secrets-store-provider-aws >/dev/null 2>&1; then
-              echo "✅ AWS provider already installed. Skipping."
-            else
-              echo "⚠️ AWS provider not found. Installing..."
-              kubectl apply -f https://raw.githubusercontent.com/aws/secrets-store-csi-driver-provider-aws/main/deployment/aws-provider-installer.yaml
-
-              echo "⏳ Waiting for AWS provider daemonset rollout..."
-              kubectl -n kube-system rollout status ds/csi-secrets-store-provider-aws --timeout=10m 
-            fi
-
->>>>>>> 31a0b6c (run integration test after scaling)
       - name: Bootstrap TLS
         env:
           CLUSTERISSUER_NAME: letsencrypt-prod-dns
@@ -310,12 +245,8 @@ jobs:
           WILDCARD_SECRET_NS: ingress-nginx
           WILDCARD_SECRET_NAME: wildcard-312ubuntu-tls
           WILDCARD_CERT_NAME: wildcard-312ubuntu-tls
-<<<<<<< HEAD
         run: ./tls-bootstrap/bootstrap-tls.sh
 
       - name: Deploy external-dns (Helm)  
         run: |
            helm upgrade --install external-dns external-dns/external-dns-helm -n external-dns --create-namespace  -f external-dns/external-dns-helm/values.yaml
-=======
-        run: ./tls-bootstrap/bootstrap-tls.sh
->>>>>>> 31a0b6c (run integration test after scaling)

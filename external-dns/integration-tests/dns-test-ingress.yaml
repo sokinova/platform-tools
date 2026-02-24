@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: dns-test.312ubuntu.com
+    - host: dev.dns-test.312ubuntu.com
       http:
         paths:
           - path: /
