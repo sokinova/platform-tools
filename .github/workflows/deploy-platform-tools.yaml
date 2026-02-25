@@ -249,4 +249,4 @@ jobs:
 
       - name: Deploy external-dns (Helm)  
         run: |
-           helm upgrade --install external-dns external-dns/external-dns-helm -n external-dns --create-namespace  -f external-dns/external-dns-helm/values.yaml
+           helm upgrade --install external-dns external-dns/external-dns-helm -n external-dns --create-namespace  -f external-dns/external-dns-helm/values/dev-values.yaml
