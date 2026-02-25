@@ -247,4 +247,6 @@ jobs:
           WILDCARD_CERT_NAME: wildcard-312ubuntu-tls
         run: ./tls-bootstrap/bootstrap-tls.sh
 
-
+      - name: Deploy external-dns (Helm)  
+        run: |
+           helm upgrade --install external-dns external-dns/external-dns-helm -n external-dns --create-namespace  -f external-dns/external-dns-helm/values/dev-values.yaml
