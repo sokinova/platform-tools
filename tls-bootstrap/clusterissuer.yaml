@@ -17,4 +17,4 @@ spec:
           route53:
             region: us-east-1
             # Replace with your actual hosted zone ID
-            hostedZoneID: Z0830261Q8W7M67RJO9H
+            hostedZoneID: Z0634657I8LJKVGYYZLY
