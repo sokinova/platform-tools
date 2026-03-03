@@ -1,0 +1,40 @@
+namespace: external-dns
+
+image:
+  repository: registry.k8s.io/external-dns/external-dns
+  tag: v0.14.0
+  pullPolicy: IfNotPresent
+
+# AWS Configuration
+aws:
+  region: us-east-1
+  zoneType: public          # public, private, or "" for both
+
+# Domain filter - only manage records for these domains
+domainFilters:
+  - cup.aziza.click
+
+# Only create records for Ingresses with this annotation:
+# external-dns.alpha.kubernetes.io/hostname
+source: ingress
+
+# TXT record owner ID - identifies which records external-dns manages
+txtOwnerId: dev-eks-cluster
+
+# Policy: sync = create + update + delete, upsert-only = create + update
+policy: sync
+
+# How often to check for changes (seconds)
+interval: 30
+
+# IRSA role ARN - MUST be set per environment
+serviceAccount:
+  roleArn: ""
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi

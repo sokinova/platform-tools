@@ -1,0 +1,5 @@
+apiVersion: v2
+name: external-dns
+description: Custom External-DNS chart for automatic Route53 DNS management
+version: 1.0.0
+appVersion: "0.14.0"

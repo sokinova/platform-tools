@@ -1,0 +1,7 @@
+serviceAccount:
+  roleArn: "arn:aws:iam::630391674178:role/dev-dev-eks-cluster-external-dns-role"
+
+txtOwnerId: dev-eks-cluster
+
+domainFilters:
+  - cup.aziza.click
