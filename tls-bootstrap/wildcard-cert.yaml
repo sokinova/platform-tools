@@ -1,13 +1,13 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: wildcard-312ubuntu-tls
+  name: wildcard-cup-aziza-click-tls
   namespace: ingress-nginx
 spec:
-  secretName: wildcard-312ubuntu-tls
+  secretName: wildcard-cup-aziza-click-tls
   issuerRef:
     name: letsencrypt-prod-dns
     kind: ClusterIssuer
   dnsNames:
-    - "*.312ubuntu.com"
-    - "312ubuntu.com"
+    - "*.cup.aziza.click"
+    - "cup.aziza.click"
