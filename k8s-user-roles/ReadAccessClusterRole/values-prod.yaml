@@ -1,8 +1,0 @@
-# values-dev.yaml
-environment: prod
-
-clusterRole:
-  name: read-access-dev           # name of the ClusterRole
-  bindingName: read-access-dev-binding  # name of the ClusterRoleBinding
-  group: dev-team                 # Kubernetes group this role applies to
-
