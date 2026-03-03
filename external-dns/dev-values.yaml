@@ -4,4 +4,4 @@ serviceAccount:
 txtOwnerId: dev-eks-cluster
 
 domainFilters:
-  - cup.aziza.click
+  - devops312.click

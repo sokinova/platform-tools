@@ -12,7 +12,7 @@ aws:
 
 # Domain filter - only manage records for these domains
 domainFilters:
-  - cup.aziza.click
+  - devops312.click
 
 # Only create records for Ingresses with this annotation:
 # external-dns.alpha.kubernetes.io/hostname
