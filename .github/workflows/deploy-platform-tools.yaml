@@ -7,6 +7,7 @@ on:
       - feature/**
 
 # OIDC permissions — required for AWS authentication without static keys
+permissions:
   id-token: write
   contents: read
 
