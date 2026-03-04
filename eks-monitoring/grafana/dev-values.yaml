@@ -33,7 +33,7 @@ datasource:
 ingress:
   enabled: true
   hostname: grafana-ubuntu-dev.devops312.click
-  whitelistSourceRange: "172.59.187.238/32"
+  whitelistSourceRange: "0.0.0.0/0"
   tls:
     enabled: true
     secretName: wildcard-devops312-click
