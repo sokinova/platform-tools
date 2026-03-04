@@ -96,7 +96,9 @@ jobs:
           WILDCARD_SECRET_NS: ingress-nginx
           WILDCARD_SECRET_NAME: wildcard-team312-tls-secret
           WILDCARD_CERT_NAME: wildcard-team312-tls-cert
-        run: ./tls-bootstrap/bootstrap-tls.sh
+        run: |
+          chmod +x tls-bootstrap/bootstrap-tls.sh
+          ./tls-bootstrap/bootstrap-tls.sh
         
       #Deploy External DNS
       - name: Deploy External DNS
