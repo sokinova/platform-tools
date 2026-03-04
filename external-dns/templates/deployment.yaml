@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-dns
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "external-dns.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: external-dns
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: external-dns
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: external-dns
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+        - name: external-dns
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --source={{ .Values.source }}
+            - --provider=aws
+            {{- range .Values.domainFilters }}
+            - --domain-filter={{ . }}
+            {{- end }}
+            - --aws-zone-type={{ .Values.aws.zoneType }}
+            - --policy={{ .Values.policy }}
+            - --registry=txt
+            - --txt-owner-id={{ .Values.txtOwnerId }}
+            - --interval={{ .Values.interval }}s
+            - --log-level=info
+          env:
+            - name: AWS_DEFAULT_REGION
+              value: {{ .Values.aws.region }}
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
