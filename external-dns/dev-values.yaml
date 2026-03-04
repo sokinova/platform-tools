@@ -1,5 +1,5 @@
 serviceAccount:
-  roleArn: "arn:aws:iam::630391674178:role/dev-dev-eks-cluster-external-dns-role"
+  roleArn: "arn:aws:iam::630391674178:role/dev-dev-eks-cluster-external-dns-irsa"
 
 txtOwnerId: dev-eks-cluster
 
