@@ -94,8 +94,9 @@ jobs:
           CLUSTER_ISSUER_MANIFEST: tls-bootstrap/clusterissuer.yaml
           WILDCARD_CERT_MANIFEST: tls-bootstrap/wildcard-cert.yaml
           WILDCARD_SECRET_NS: ingress-nginx
-          WILDCARD_SECRET_NAME: wildcard-team312-tls-secret
-          WILDCARD_CERT_NAME: wildcard-team312-tls-cert
+          env:
+          WILDCARD_SECRET_NAME: wildcard-devops312-click
+          WILDCARD_CERT_NAME: wildcard-devops312-click
         run: |
           chmod +x tls-bootstrap/bootstrap-tls.sh
           ./tls-bootstrap/bootstrap-tls.sh
