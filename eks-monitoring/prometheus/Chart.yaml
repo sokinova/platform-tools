@@ -2,4 +2,4 @@ apiVersion: v2
 name: prometheus
 description: Custom Prometheus chart for EKS monitoring
 version: 1.0.0
-appVersion: "2.53.0"
+appVersion: "2.51.0"

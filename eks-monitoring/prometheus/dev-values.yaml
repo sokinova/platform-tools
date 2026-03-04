@@ -3,21 +3,29 @@ namespace: monitoring
 scrapeInterval: 30s
 evaluationInterval: 30s
 
-server:
-  replicas: 1
-  image:
-    repository: prom/prometheus
-    tag: v2.53.0
-  retention: 7d
-  storage:
-    size: 5Gi
-    storageClass: gp2
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      memory: 512Mi
+replicas: 1
+
+image:
+  repository: prom/prometheus
+  tag: v2.51.0
+
+retention: 7d
+
+storage:
+  size: 5Gi
+  storageClass: gp2
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 250m
+    memory: 512Mi
+
+service:
+  port: 9090
+  type: ClusterIP
 
 nodeExporter:
   image:
@@ -28,6 +36,7 @@ nodeExporter:
       cpu: 50m
       memory: 64Mi
     limits:
+      cpu: 100m
       memory: 128Mi
 
 kubeStateMetrics:
@@ -39,4 +48,5 @@ kubeStateMetrics:
       cpu: 50m
       memory: 64Mi
     limits:
+      cpu: 100m
       memory: 256Mi

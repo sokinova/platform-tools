@@ -1,0 +1,39 @@
+namespace: monitoring
+
+image:
+  repository: grafana/grafana
+  tag: 10.4.0
+  pullPolicy: IfNotPresent
+
+replicas: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 250m
+    memory: 512Mi
+
+service:
+  port: 3000
+  type: ClusterIP
+
+# IRSA role for reading AWS Secrets Manager
+serviceAccount:
+  roleArn: "arn:aws:iam::630391674178:role/dev-dev-eks-cluster-grafana-secrets-role"
+
+# AWS Secrets Manager secret name
+secretsManager:
+  secretName: monitoring/grafana
+
+datasource:
+  url: http://prometheus.monitoring.svc.cluster.local:9090
+
+ingress:
+  enabled: true
+  hostname: grafana-ubuntu-dev.devops312.click
+  whitelistSourceRange: "172.59.187.238/32"
+  tls:
+    enabled: true
+    secretName: wildcard-devops312-click
