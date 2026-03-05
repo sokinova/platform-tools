@@ -1,0 +1,117 @@
+name: 'Deploy Platform Tools'
+
+on:
+  push:
+    branches:
+      - main
+      - feature/**
+
+# OIDC permissions — required for AWS authentication without static keys
+permissions:
+  id-token: write
+  contents: read
+
+# Shared environment variables
+env:
+  AWS_REGION: "us-east-1"
+  CLUSTER_NAME: "dev-eks-cluster"
+  ENVIRONMENT: "dev"
+  DOMAIN: "devops312.click"
+
+jobs:
+  deploy-platform-tools:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    environment: |
+          ${{
+            github.ref == 'refs/heads/main' && 'dev' ||
+            github.ref == 'refs/heads/develop' && 'dev' ||
+            startsWith(github.ref, 'refs/heads/feature/') && 'dev'
+          }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.IAM_ROLE }}
+          role-session-name: github-actions-platform-tools
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name ${{ env.CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+
+      #Deploy nginx
+      - name: Deploy Ingress NGINX
+        run: |
+          if kubectl -n ingress-nginx get deploy ingress-nginx-controller >/dev/null 2>&1; then
+            echo "✅ ingress-nginx already installed — checking for updates..."
+            kubectl apply -f ingress-nginx/deploy.yaml
+          else
+            echo "⚠️ ingress-nginx not found. Deploying..."
+            kubectl apply -f ingress-nginx/deploy.yaml
+          fi
+      
+      #Deploy CSI and AWS provider
+      - name: Deploy Secrets Store CSI Driver
+        run: |
+            if kubectl -n kube-system get ds csi-secrets-store-secrets-store-csi-driver >/dev/null 2>&1; then
+              echo "✅ Secrets Store CSI Driver already installed. Skipping."
+            else
+              echo "⚠️ CSI Driver not found. Installing via Helm..."
+              helm repo add secrets-store-csi-driver https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
+              helm repo update
+
+              helm upgrade --install csi-secrets-store secrets-store-csi-driver/secrets-store-csi-driver \
+              -n kube-system \
+              --set syncSecret.enabled=true
+
+              echo "⏳ Waiting for CSI driver daemonset rollout..."
+              kubectl -n kube-system rollout status ds/csi-secrets-store-secrets-store-csi-driver --timeout=10m
+            fi
+
+      - name: Deploy AWS provider for Secrets Store CSI
+        run: |
+            if kubectl -n kube-system get ds csi-secrets-store-provider-aws >/dev/null 2>&1; then
+              echo "✅ AWS provider already installed. Skipping."
+            else
+              echo "⚠️ AWS provider not found. Installing..."
+              kubectl apply -f https://raw.githubusercontent.com/aws/secrets-store-csi-driver-provider-aws/main/deployment/aws-provider-installer.yaml
+
+              echo "⏳ Waiting for AWS provider daemonset rollout..."
+              kubectl -n kube-system rollout status ds/csi-secrets-store-provider-aws --timeout=10m 
+            fi
+
+      #Rub bootstrap TLS
+      - name: Bootstrap TLS
+        env:
+          CLUSTERISSUER_NAME: letsencrypt-prod-dns
+          HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
+          CERT_MANAGER_ROUTE53_ROLE_ARN: ${{ vars.CERT_MANAGER_ROUTE53_ROLE_ARN }}
+          CLUSTER_ISSUER_MANIFEST: tls-bootstrap/clusterissuer.yaml
+          WILDCARD_CERT_MANIFEST: tls-bootstrap/wildcard-cert.yaml
+          WILDCARD_SECRET_NS: ingress-nginx
+          env:
+          WILDCARD_SECRET_NAME: wildcard-devops312-click
+          WILDCARD_CERT_NAME: wildcard-devops312-click
+        run: |
+          chmod +x tls-bootstrap/bootstrap-tls.sh
+          ./tls-bootstrap/bootstrap-tls.sh
+        
+      #Deploy External DNS
+      - name: Deploy External DNS
+        run: |
+          helm upgrade --install external-dns ./external-dns -f ./external-dns/${{ vars.STAGE }}-values.yaml --namespace external-dns --create-namespace 
+
+      #Deploy prometheus
+      - name: Deploy Prometheus
+        run: |
+          helm upgrade --install prometheus ./eks-monitoring/prometheus  -f ./eks-monitoring/prometheus/${{ vars.STAGE }}-values.yaml --namespace monitoring  --create-namespace 
+
+      #Deploy Grafana
+      - name: Deploy Grafana
+        run: |
+          helm upgrade --install grafana ./eks-monitoring/grafana -f ./eks-monitoring/grafana/${{ vars.STAGE }}-values.yaml  --namespace monitoring
